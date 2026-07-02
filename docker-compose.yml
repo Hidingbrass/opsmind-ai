@@ -1,0 +1,41 @@
+name: opsmind
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: opsmind-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+  mysql:
+    image: mysql:8.4
+    container_name: opsmind-mysql
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: opsmind_root_password
+      MYSQL_DATABASE: opsmind
+      MYSQL_USER: opsmind
+      MYSQL_PASSWORD: opsmind_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  chroma:
+    image: chromadb/chroma:0.5.23
+    container_name: opsmind-chroma
+    ports:
+      - "8001:8000"
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /chroma/chroma
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - chroma-data:/chroma/chroma
+
+volumes:
+  redis-data:
+  mysql-data:
+  chroma-data:

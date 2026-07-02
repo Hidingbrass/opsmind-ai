@@ -67,3 +67,34 @@ opsmind-ai/
 7. `Nginx` 与 `Docker Compose` 部署。
 8. 前端控制台和最终演示打磨。
 
+## 本地基础设施启动
+
+`docker-compose.yml` 已显式设置项目名为 `opsmind`，因此即使仓库目录包含中文，也可以直接启动：
+
+```bash
+docker compose up -d redis mysql chroma
+```
+
+检查服务状态：
+
+```bash
+docker compose ps
+```
+
+验证 Redis：
+
+```bash
+docker exec opsmind-redis redis-cli ping
+```
+
+验证 MySQL：
+
+```bash
+docker exec opsmind-mysql mysql -uopsmind -popsmind_password -e "SHOW DATABASES;"
+```
+
+验证 Chroma：
+
+```bash
+curl http://127.0.0.1:8001/api/v1/heartbeat
+```
