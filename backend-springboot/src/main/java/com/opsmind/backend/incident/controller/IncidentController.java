@@ -1,7 +1,10 @@
-package com.opsmind.backend.incident;
+package com.opsmind.backend.incident.controller;
 
 import java.util.List;
 
+import com.opsmind.backend.incident.dto.CreateIncidentRequest;
+import com.opsmind.backend.incident.model.Incident;
+import com.opsmind.backend.incident.service.IncidentService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;

@@ -1,4 +1,6 @@
-package com.opsmind.backend.incident;
+package com.opsmind.backend.incident.dto;
+
+import com.opsmind.backend.incident.model.IncidentSeverity;
 
 public record CreateIncidentRequest(
         String title,

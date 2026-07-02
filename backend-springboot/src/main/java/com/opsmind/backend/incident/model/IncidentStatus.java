@@ -1,4 +1,4 @@
-package com.opsmind.backend.incident;
+package com.opsmind.backend.incident.model;
 
 public enum IncidentStatus {
     OPEN,

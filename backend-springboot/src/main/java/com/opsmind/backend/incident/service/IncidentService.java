@@ -1,7 +1,10 @@
-package com.opsmind.backend.incident;
+package com.opsmind.backend.incident.service;
 
 import java.util.List;
 
+import com.opsmind.backend.incident.dto.CreateIncidentRequest;
+import com.opsmind.backend.incident.model.Incident;
+import com.opsmind.backend.incident.repository.IncidentRepository;
 import org.springframework.stereotype.Service;
 
 @Service

@@ -1,4 +1,4 @@
-package com.opsmind.backend.controller;
+package com.opsmind.backend.health;
 
 import java.time.Instant;
 import java.util.Map;

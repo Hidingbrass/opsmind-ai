@@ -1,4 +1,4 @@
-package com.opsmind.backend.incident;
+package com.opsmind.backend.incident.model;
 
 import java.time.Instant;
 import java.util.UUID;
