@@ -2,7 +2,9 @@ package com.opsmind.backend.incident.controller;
 
 import java.util.List;
 
+import com.opsmind.backend.common.web.Result;
 import com.opsmind.backend.incident.dto.CreateIncidentRequest;
+import com.opsmind.backend.incident.dto.IncidentResponse;
 import com.opsmind.backend.incident.model.Incident;
 import com.opsmind.backend.incident.service.IncidentService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,17 +25,22 @@ public class IncidentController {
     }
 
     @PostMapping
-    public Incident create(@RequestBody CreateIncidentRequest request) {
-        return incidentService.create(request);
+    public Result<IncidentResponse> create(@RequestBody CreateIncidentRequest request) {
+        Incident incident = incidentService.create(request);
+        return Result.success(IncidentResponse.from(incident));
     }
 
     @GetMapping
-    public List<Incident> list() {
-        return incidentService.list();
+    public Result<List<IncidentResponse>> list() {
+        List<IncidentResponse> incidents = incidentService.list().stream()
+                .map(IncidentResponse::from)
+                .toList();
+        return Result.success(incidents);
     }
 
     @GetMapping("/{id}")
-    public Incident getById(@PathVariable String id) {
-        return incidentService.getById(id);
+    public Result<IncidentResponse> getById(@PathVariable String id) {
+        Incident incident = incidentService.getById(id);
+        return Result.success(IncidentResponse.from(incident));
     }
 }
