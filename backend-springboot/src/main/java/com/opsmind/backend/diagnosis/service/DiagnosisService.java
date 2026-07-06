@@ -2,6 +2,8 @@ package com.opsmind.backend.diagnosis.service;
 
 import java.util.List;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.opsmind.backend.diagnosis.dto.DiagnosisReport;
 import com.opsmind.backend.diagnosis.dto.DiagnosisRequest;
 import com.opsmind.backend.incident.dto.IncidentResponse;
@@ -11,19 +13,33 @@ import com.opsmind.backend.observability.model.LogEntry;
 import com.opsmind.backend.observability.model.MetricPoint;
 import com.opsmind.backend.observability.model.TraceSpan;
 import com.opsmind.backend.observability.service.ObservabilityService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
 
 @Service
 public class DiagnosisService {
 
+    private static final Logger log = LoggerFactory.getLogger(DiagnosisService.class);
     private static final String PAYMENT_TIMEOUT_TRACE_ID = "trace-payment-timeout-001";
 
     private final IncidentService incidentService;
     private final ObservabilityService observabilityService;
+    private final RestClient restClient;
+    private final ObjectMapper objectMapper;
 
-    public DiagnosisService(IncidentService incidentService, ObservabilityService observabilityService) {
+    public DiagnosisService(
+            IncidentService incidentService,
+            ObservabilityService observabilityService,
+            RestClient restClient,
+            ObjectMapper objectMapper
+    ) {
         this.incidentService = incidentService;
         this.observabilityService = observabilityService;
+        this.restClient = restClient;
+        this.objectMapper = objectMapper;
     }
 
     public DiagnosisReport diagnose(String incidentId) {
@@ -34,18 +50,28 @@ public class DiagnosisService {
         List<MetricPoint> metrics = observabilityService.queryMetrics(serviceName);
         List<TraceSpan> traces = observabilityService.queryTrace(PAYMENT_TIMEOUT_TRACE_ID);
         DiagnosisRequest diagnosisRequest = new DiagnosisRequest(incidentResponse, logs, metrics, traces);
+        String requestBody = toJson(diagnosisRequest);
+        log.info("调用 AI 诊断服务，incidentId={}, requestBodyLength={}", incidentId, requestBody.length());
 
-        return new DiagnosisReport(
-                incidentId,
-                "检测到 " + diagnosisRequest.incident().serviceName() + " 存在异常，故障与支付链路超时高度相关。",
-                "支付服务调用第三方支付网关超时，导致订单结算请求失败。",
-                List.of(
-                        "日志中出现调用第三方支付网关超时",
-                        "payment-service 的 P95 延迟升高到 5200ms",
-                        "链路追踪显示 payment-service -> payment-gateway 调用耗时 5000ms 并返回 ERROR"
-                ),
-                "建议检查第三方支付网关状态，必要时切换备用支付通道或启用支付降级策略。",
-                0.86
-        );
+        DiagnosisReport body = restClient.post()
+                .uri("http://localhost:8000/ai/diagnose")
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(requestBody)
+                .retrieve()
+                .body(DiagnosisReport.class);
+
+        if (body == null) {
+            throw new IllegalStateException("AI 服务返回空诊断报告");
+        }
+        return body;
+    }
+
+    private String toJson(DiagnosisRequest diagnosisRequest) {
+        try {
+            return objectMapper.writeValueAsString(diagnosisRequest);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("诊断请求序列化失败", ex);
+        }
     }
 }

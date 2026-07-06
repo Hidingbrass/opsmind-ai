@@ -2,6 +2,9 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 
+from app.diagnosis import generate_diagnosis
+from app.schemas import DiagnosisRequest, DiagnosisReport
+
 app = FastAPI(
     title="OpsMind AI Agent Service",
     description="OpsMind AI 的 Python AI Agent 服务",
@@ -16,3 +19,8 @@ def health():
         "status": "UP",
         "time": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.post("/ai/diagnose", response_model=DiagnosisReport)
+def diagnose(request: DiagnosisRequest):
+    return generate_diagnosis(request)
