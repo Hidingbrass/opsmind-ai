@@ -12,6 +12,7 @@ build/
 .venv/
 __pycache__/
 *.pyc
+ai-agent-service/.chroma/
 
 .env
 .env.local
