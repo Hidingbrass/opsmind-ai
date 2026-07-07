@@ -4,8 +4,11 @@ import java.util.List;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.opsmind.backend.diagnosis.dto.DiagnosisRecordResponse;
 import com.opsmind.backend.diagnosis.dto.DiagnosisReport;
 import com.opsmind.backend.diagnosis.dto.DiagnosisRequest;
+import com.opsmind.backend.diagnosis.model.DiagnosisRecord;
+import com.opsmind.backend.diagnosis.repository.DiagnosisRecordRepository;
 import com.opsmind.backend.incident.dto.IncidentResponse;
 import com.opsmind.backend.incident.model.Incident;
 import com.opsmind.backend.incident.service.IncidentService;
@@ -29,17 +32,20 @@ public class DiagnosisService {
     private final ObservabilityService observabilityService;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final DiagnosisRecordRepository diagnosisRecordRepository;
 
     public DiagnosisService(
             IncidentService incidentService,
             ObservabilityService observabilityService,
             RestClient restClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            DiagnosisRecordRepository diagnosisRecordRepository
     ) {
         this.incidentService = incidentService;
         this.observabilityService = observabilityService;
         this.restClient = restClient;
         this.objectMapper = objectMapper;
+        this.diagnosisRecordRepository = diagnosisRecordRepository;
     }
 
     public DiagnosisReport diagnose(String incidentId) {
@@ -64,14 +70,60 @@ public class DiagnosisService {
         if (body == null) {
             throw new IllegalStateException("AI 服务返回空诊断报告");
         }
+        saveDiagnosisRecord(body);
         return body;
+
     }
 
-    private String toJson(DiagnosisRequest diagnosisRequest) {
+    public List<DiagnosisRecordResponse> listRecords(String incidentId) {
+        return diagnosisRecordRepository.findByIncidentIdOrderByCreatedAtDesc(incidentId)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    private DiagnosisRecordResponse toResponse(DiagnosisRecord record) {
+        return new DiagnosisRecordResponse(
+                record.getId(),
+                record.getIncidentId(),
+                record.getSummary(),
+                record.getRootCause(),
+                fromJsonToStringList(record.getEvidenceJson()),
+                record.getRecommendation(),
+                record.getConfidence(),
+                record.getCreatedAt()
+        );
+    }
+
+    private List<String> fromJsonToStringList(String value) {
         try {
-            return objectMapper.writeValueAsString(diagnosisRequest);
+            return objectMapper.readValue(
+                    value,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
+            );
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("JSON 反序列化失败", e);
+        }
+    }
+
+    private void saveDiagnosisRecord(DiagnosisReport diagnosisReport) {
+        String evidenceJson = toJson(diagnosisReport.evidence());
+        DiagnosisRecord diagnosisRecord = new DiagnosisRecord(
+                diagnosisReport.incidentId(),
+                diagnosisReport.summary(),
+                diagnosisReport.rootCause(),
+                evidenceJson,
+                diagnosisReport.recommendation(),
+                diagnosisReport.confidence()
+        );
+        diagnosisRecordRepository.save(diagnosisRecord);
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("诊断请求序列化失败", ex);
+            throw new IllegalStateException("JSON 序列化失败", ex);
         }
     }
 }
