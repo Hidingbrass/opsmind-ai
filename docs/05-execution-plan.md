@@ -34,7 +34,7 @@ MVP 版本：先做完整闭环，约 2-3 周。
 
 ## 当前进度快照
 
-更新时间：2026-07-08。
+更新时间：2026-07-16。
 
 已经完成：
 
@@ -46,29 +46,40 @@ MVP 版本：先做完整闭环，约 2-3 周。
 - AI 诊断报告生成、保存到 MySQL、按故障查询历史诊断记录。
 - Chroma 本地知识库基础结构。
 - `payment-timeout` Runbook 文档。
+- `redis-connection-failure` Runbook 文档。
+- `database-slow-query` Runbook 文档。
 - 使用 `BAAI/bge-small-zh-v1.5` 中文 embedding 模型写入 Chroma。
 - Runbook 知识库检索接口：`GET /ai/runbooks/search`。
 - `/ai/diagnose` 已接入 Runbook RAG 检索，诊断证据中包含知识库命中来源。
+- 支付超时、Redis 连接失败、数据库慢查询三场景观测数据。
+- `/ai/diagnose` 已能按三类故障场景返回不同根因报告。
+- Spring Boot 端三场景诊断接口均能保存 RAG 增强报告。
+- 异步诊断任务第一版闭环已跑通：创建任务立即返回 `taskId`，后台执行 AI 诊断，成功后写入 `diagnosisRecordId`，失败后写入 `failureReason`。
+- SSE 后端闭环已跑通：支持按 `taskId` 订阅、当前状态快照、`RUNNING` / `CALL_AI` 过程事件和 `SUCCESS` / `FAILED` 终态事件。
+- 已使用 curl 验证 SSE 成功与失败终态均与数据库一致，终态推送后连接自动关闭。
+- Spring Boot Tool Gateway 已完成 `queryLogs` 白名单分发、通用参数校验、任务与故障归属校验和结构化失败返回。
+- 工具调用审计写入闭环已完成：成功只保存结果摘要，失败保存原因，并记录请求、状态和耗时。
+- 已用 curl 和 MySQL 验证 `queryLogs` 成功审计与未知工具失败审计均真实落库，数据库记录与接口响应一致。
 
 当前正在进行：
 
 ```text
-MVP 阶段 4：Runbook RAG 知识库接入诊断报告
+增强版本阶段 7：Function Calling 和工具调用审计
 ```
 
 当前验收重点：
 
 ```text
-1. /ai/runbooks/search 能按中文故障现象检索 Runbook。
-2. /ai/diagnose 返回的 evidence 包含知识库命中来源。
-3. Spring Boot 调用 Python AI 服务后，RAG 增强后的诊断报告能保存到 MySQL。
+1. 增加按 taskId 查询工具调用审计的 HTTP 接口。
+2. 让 Python AI Agent 真正通过 Spring Boot Tool Gateway 调用工具。
+3. 在 queryLogs 闭环基础上补充指标、链路和 Runbook 工具。
 ```
 
 下一步：
 
 ```text
-补充更多 Runbook 场景，例如 Redis 连接失败、数据库慢查询。
-然后进入增强版本的异步诊断任务设计。
+完成工具调用审计查询接口。
+然后把 Python 诊断流程从“Java 预先提供全部证据”升级为“Agent 按需调用工具”。
 ```
 
 ## 架构升级方向
@@ -318,16 +329,17 @@ incident context -> search runbook -> cited evidence -> diagnosis report
 要完成的内容：
 
 - `DiagnosisTask` 任务模型。
-- 任务状态：`PENDING`、`RUNNING`、`SUCCEEDED`、`FAILED`、`CANCELLED`。
+- 任务状态：`PENDING`、`RUNNING`、`SUCCESS`、`FAILED`。
 - 创建任务接口。
 - 查询任务状态接口。
 - 后台执行诊断逻辑。
-- 失败原因和重试次数记录。
+- 成功时保存 `diagnosisRecordId`。
+- 失败时保存 `failureReason`。
 
 核心接口：
 
 ```text
-POST /api/incidents/{incidentId}/diagnosis-tasks
+POST /api/diagnosis-tasks/incidents/{incidentId}
 GET  /api/diagnosis-tasks/{taskId}
 ```
 
@@ -335,7 +347,15 @@ GET  /api/diagnosis-tasks/{taskId}
 
 - 创建诊断任务后立即返回 `taskId`。
 - 前端或 curl 可以轮询任务状态。
-- AI 服务异常时任务状态变为 `FAILED` 并记录原因。
+- 任务成功后状态变为 `SUCCESS`，并保存 `diagnosisRecordId`。
+- AI 服务异常时任务状态变为 `FAILED`，并保存 `failureReason`。
+
+当前实现状态：
+
+- 已完成 `DiagnosisTask`、`DiagnosisTaskStatus`、`DiagnosisTaskRepository`、`DiagnosisTaskResponse`。
+- 已完成 `DiagnosisTaskController` 和 `DiagnosisTaskService`。
+- 已通过 `@EnableAsync` + `DiagnosisTaskExecutor` 实现后台执行。
+- 已验证异步诊断任务闭环可用。
 
 学习重点：
 
@@ -350,6 +370,8 @@ GET  /api/diagnosis-tasks/{taskId}
 ### 阶段 6：SSE 实时诊断过程
 
 预计时间：2-3 天。
+
+当前状态：后端 SSE 闭环已完成，前端时间线展示留到控制台阶段实现。
 
 目标：让前端实时看到诊断过程，适合展示 AI Agent 的推理和工具调用步骤。
 
@@ -379,8 +401,10 @@ GET /api/diagnosis-tasks/{taskId}/events
 
 验收方式：
 
-- 开始诊断后，页面能实时出现“查询日志、查询指标、检索 Runbook、生成报告”等步骤。
-- 刷新页面后仍能查询到任务最终状态。
+- `GET /api/diagnosis-tasks/{taskId}/events` 能建立 `text/event-stream` 连接。
+- 订阅时立即推送数据库中的当前状态快照，避免快速任务在连接建立前丢失终态。
+- 异步执行器能推送 `RUNNING`、`CALL_AI`、`SUCCESS` 和 `FAILED` 事件。
+- curl 收到的成功或失败终态与任务表一致，推送后 SSE 连接自动关闭。
 
 学习重点：
 
@@ -395,6 +419,8 @@ GET /api/diagnosis-tasks/{taskId}/events
 ### 阶段 7：Function Calling 和工具调用审计
 
 预计时间：4-6 天。
+
+当前状态：`queryLogs` Tool Gateway 与成功/失败审计写入闭环已完成，审计查询接口和 Python Agent 接入待完成。
 
 目标：让 AI Agent 自己决定调用日志、指标、链路、Runbook 和发布记录工具，并记录每次工具调用。
 
@@ -898,20 +924,20 @@ SSE 展示
 当前正在进行：
 
 ```text
-MVP 阶段 4：Runbook RAG 知识库接入诊断报告
+增强版本阶段 7：Function Calling 和工具调用审计
 ```
 
 下一步应完成：
 
 ```text
-验证 /ai/diagnose 返回知识库证据
-验证 Spring Boot 端诊断接口能保存 RAG 增强报告
-补充 Redis 连接失败和数据库慢查询 Runbook
-Git 提交并推送
+增加按 taskId 查询工具调用审计的 HTTP 接口
+设计审计查询 DTO，避免直接暴露 JPA 实体
+让 Python AI Agent 调用 Spring Boot Tool Gateway
+继续扩展 queryMetrics、queryTrace 和 searchRunbook
 ```
 
-完成后进入：
+后续进入：
 
 ```text
-增强版本阶段 5：异步诊断任务
+增强版本阶段 8：Redis 工程化与稳定性保护
 ```

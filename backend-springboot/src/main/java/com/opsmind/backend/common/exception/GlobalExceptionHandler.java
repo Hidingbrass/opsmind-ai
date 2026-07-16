@@ -6,9 +6,20 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+/**
+ * 将 Controller 调用链抛出的异常转换成统一 {@link Result} JSON 结构。
+ *
+ * <p>业务代码只需抛出有意义的异常，不需要在每个 Controller 重复组装错误响应。
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /**
+     * 处理参数错误、资源不存在等可预期的业务拒绝。
+     *
+     * @param ex Service 抛出的业务参数异常
+     * @return HTTP 400 和可直接展示的错误消息
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Result<Void>> handleIllegalArgumentException(IllegalArgumentException ex) {
         return ResponseEntity
@@ -16,6 +27,12 @@ public class GlobalExceptionHandler {
                 .body(Result.failure(400, ex.getMessage()));
     }
 
+    /**
+     * 兜底处理未预期异常，对外隐藏堆栈和内部实现细节。
+     *
+     * @param ex 未被更具体处理器匹配的异常
+     * @return HTTP 500 和统一系统错误消息
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Result<Void>> handleException(Exception ex) {
         return ResponseEntity
