@@ -1,6 +1,6 @@
 """Java 后端与 Python AI 服务之间的 Pydantic JSON 合同。"""
 
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -52,12 +52,23 @@ class TraceSpanPayload(BaseModel):
 
 
 class DiagnosisRequest(BaseModel):
-    """Complete evidence bundle sent by Spring Boot for one diagnosis."""
+    """Spring Boot 为一次诊断发送的完整任务与证据上下文。"""
 
+    taskId: Optional[str] = None  # 异步诊断任务 id；旧同步诊断请求中允许为空。
     incident: IncidentPayload  # 待诊断故障。
     logs: list[LogEntryPayload]  # 与故障服务相关的日志。
     metrics: list[MetricPointPayload]  # 与故障服务相关的指标。
     traces: list[TraceSpanPayload]  # 由日志 traceId 延伸得到的链路。
+
+
+class ToolExecutionResult(BaseModel):
+    """从 Spring 统一响应中提取、供诊断流程消费的内层工具结果。"""
+
+    toolName: str  # 实际尝试执行的工具名。
+    status: Literal["SUCCESS", "FAILED"]  # 工具级状态，不是 Spring 外层 Result.code。
+    data: Any = None  # 成功时的结构化工具结果，失败时通常为 None。
+    errorMessage: Optional[str] = None  # 失败原因，成功时为 None。
+    latencyMs: int  # Spring Tool Gateway 记录的执行耗时。
 
 
 class DiagnosisReport(BaseModel):

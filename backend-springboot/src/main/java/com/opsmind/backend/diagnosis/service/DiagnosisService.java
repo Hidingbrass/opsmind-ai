@@ -66,23 +66,25 @@ public class DiagnosisService {
      * @return 已完成并保存的诊断结果
      */
     public DiagnosisReport diagnose(String incidentId) {
-        DiagnosisRecord savedRecord = diagnoseAndSaveRecord(incidentId);
+        // 同步调试接口没有异步任务上下文，因此显式传入 null。
+        DiagnosisRecord savedRecord = diagnoseAndSaveRecord(null, incidentId);
         return toReport(savedRecord);
     }
 
     /**
      * 供异步执行器使用，返回已保存实体，便于任务记录 diagnosisRecordId。
      *
+     * @param taskId 异步诊断任务 id；同步调试链路中为 null
      * @param incidentId 故障 id
      * @return 已生成数据库 id 的诊断记录
      */
-    public DiagnosisRecord diagnoseAndSaveRecord(String incidentId) {
-        DiagnosisReport report = requestAiDiagnosis(incidentId);
+    public DiagnosisRecord diagnoseAndSaveRecord(String taskId, String incidentId) {
+        DiagnosisReport report = requestAiDiagnosis(taskId, incidentId);
         return saveDiagnosisRecord(report);
     }
 
-    /** 组装完整故障上下文并调用 {@code POST /ai/diagnose}。 */
-    private DiagnosisReport requestAiDiagnosis(String incidentId) {
+    /** 组装任务与故障上下文并调用 {@code POST /ai/diagnose}。 */
+    private DiagnosisReport requestAiDiagnosis(String taskId, String incidentId) {
         Incident incident = incidentService.getById(incidentId);
         IncidentResponse incidentResponse = IncidentResponse.from(incident);
         String serviceName = incident.getServiceName();
@@ -96,9 +98,14 @@ public class DiagnosisService {
                 .toList();
 
         // 把故障事件、日志、指标、链路追踪统一打包给 AI 服务，AI 才能基于完整上下文做诊断。
-        DiagnosisRequest diagnosisRequest = new DiagnosisRequest(incidentResponse, logs, metrics, traces);
+        DiagnosisRequest diagnosisRequest = new DiagnosisRequest(taskId, incidentResponse, logs, metrics, traces);
         String requestBody = toJson(diagnosisRequest);
-        log.info("调用 AI 诊断服务，incidentId={}, requestBodyLength={}", incidentId, requestBody.length());
+        log.info(
+                "调用 AI 诊断服务，taskId={}, incidentId={}, requestBodyLength={}",
+                taskId,
+                incidentId,
+                requestBody.length()
+        );
 
         DiagnosisReport body = restClient.post()
                 .uri("http://localhost:8000/ai/diagnose")

@@ -54,7 +54,8 @@ public class DiagnosisTaskExecutor {
                     taskId,
                     DiagnosisTaskEvent.running(taskId, "CALL_AI", "正在调用 AI 诊断服务")
             );
-            DiagnosisRecord record = diagnosisService.diagnoseAndSaveRecord(task.getIncidentId());
+            // 同时传递 taskId 和 incidentId，让 Python 后续调用工具时可以通过归属校验。
+            DiagnosisRecord record = diagnosisService.diagnoseAndSaveRecord(taskId, task.getIncidentId());
             task.markSuccess(record.getId());
             diagnosisTaskRepository.save(task);
             diagnosisTaskEventPublisher.publish(

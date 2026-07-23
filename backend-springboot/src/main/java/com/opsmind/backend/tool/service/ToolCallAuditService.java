@@ -3,6 +3,7 @@ package com.opsmind.backend.tool.service;
 import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.opsmind.backend.tool.dto.ToolCallAuditResponse;
 import com.opsmind.backend.tool.dto.ToolExecutionRequest;
 import com.opsmind.backend.tool.dto.ToolExecutionResponse;
 import com.opsmind.backend.tool.dto.ToolExecutionStatus;
@@ -91,5 +92,23 @@ public class ToolCallAuditService {
         } catch (Exception exception) {
             log.warn("保存工具调用审计失败", exception);
         }
+    }
+
+    /**
+     * 按诊断任务查询审计历史，并转换成不含原始请求参数的对外 DTO。
+     *
+     * @param taskId 异步诊断任务 id
+     * @return 最新工具调用排在前面的审计列表
+     */
+    public List<ToolCallAuditResponse> listByTaskId(String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new IllegalArgumentException("taskId 不能为空");
+        }
+
+        // Repository 负责筛选和排序，Service 只负责把实体转换成安全的接口视图。
+        return toolCallAuditRepository.findByTaskIdOrderByCreatedAtDesc(taskId)
+                .stream()
+                .map(ToolCallAuditResponse::from)
+                .toList();
     }
 }

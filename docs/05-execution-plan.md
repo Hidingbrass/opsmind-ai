@@ -34,7 +34,7 @@ MVP 版本：先做完整闭环，约 2-3 周。
 
 ## 当前进度快照
 
-更新时间：2026-07-16。
+更新时间：2026-07-24。
 
 已经完成：
 
@@ -60,6 +60,10 @@ MVP 版本：先做完整闭环，约 2-3 周。
 - Spring Boot Tool Gateway 已完成 `queryLogs` 白名单分发、通用参数校验、任务与故障归属校验和结构化失败返回。
 - 工具调用审计写入闭环已完成：成功只保存结果摘要，失败保存原因，并记录请求、状态和耗时。
 - 已用 curl 和 MySQL 验证 `queryLogs` 成功审计与未知工具失败审计均真实落库，数据库记录与接口响应一致。
+- 工具审计查询接口已完成：支持按 `taskId` 倒序查询，并通过 DTO 隐藏原始请求参数。
+- Java 已将异步诊断 `taskId` 传入 Python，Python Tool Client 支持环境变量地址、超时和结构化失败。
+- Python 诊断流程已主动调用 `queryLogs`，工具失败时降级使用已有日志，不中断诊断。
+- 已通过真实异步任务验收 Agent 工具闭环：任务成功保存报告，审计中的任务、故障和工具结果一致。
 
 当前正在进行：
 
@@ -70,16 +74,16 @@ MVP 版本：先做完整闭环，约 2-3 周。
 当前验收重点：
 
 ```text
-1. 增加按 taskId 查询工具调用审计的 HTTP 接口。
-2. 让 Python AI Agent 真正通过 Spring Boot Tool Gateway 调用工具。
-3. 在 queryLogs 闭环基础上补充指标、链路和 Runbook 工具。
+1. 在 `queryLogs` 模式上补充 `queryMetrics` 工具。
+2. 继续补充 `queryTrace` 和 `searchRunbook` 工具。
+3. 让诊断结论显式使用多种工具返回的结构化证据。
 ```
 
 下一步：
 
 ```text
-完成工具调用审计查询接口。
-然后把 Python 诊断流程从“Java 预先提供全部证据”升级为“Agent 按需调用工具”。
+沿用已验收的 Tool Gateway、审计和 Python Client 边界，完成 `queryMetrics` 闭环。
+然后继续补充链路和 Runbook 工具，让 Agent 按需获取多类证据。
 ```
 
 ## 架构升级方向
@@ -420,7 +424,7 @@ GET /api/diagnosis-tasks/{taskId}/events
 
 预计时间：4-6 天。
 
-当前状态：`queryLogs` Tool Gateway 与成功/失败审计写入闭环已完成，审计查询接口和 Python Agent 接入待完成。
+当前状态：`queryLogs` Tool Gateway、成功/失败审计、审计查询接口和 Python Agent 主动调用均已完成并通过真实异步任务验收。
 
 目标：让 AI Agent 自己决定调用日志、指标、链路、Runbook 和发布记录工具，并记录每次工具调用。
 
@@ -930,10 +934,9 @@ SSE 展示
 下一步应完成：
 
 ```text
-增加按 taskId 查询工具调用审计的 HTTP 接口
-设计审计查询 DTO，避免直接暴露 JPA 实体
-让 Python AI Agent 调用 Spring Boot Tool Gateway
-继续扩展 queryMetrics、queryTrace 和 searchRunbook
+沿用 queryLogs 的网关、校验、审计和客户端模式实现 queryMetrics
+让 Python 诊断流程消费指标工具结果，并在失败时安全降级
+继续扩展 queryTrace 和 searchRunbook
 ```
 
 后续进入：

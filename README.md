@@ -119,6 +119,17 @@ MVP 版本：故障注入 -> 观测数据 -> 基础 AI 诊断 -> Runbook RAG。
 
 详细执行计划见 [docs/05-execution-plan.md](docs/05-execution-plan.md)。
 
+## 当前进度
+
+截至 2026-07-24，项目已经完成同步 RAG 诊断、异步任务、SSE 终态推送和第一条 Function Calling 工具闭环。
+
+- Spring Boot Tool Gateway 已支持 `queryLogs` 白名单分发、任务归属校验和成功/失败审计。
+- Python AI 服务已通过 `taskId` 主动调用 Tool Gateway，并在工具不可用时降级使用已有日志。
+- `GET /api/tool-call-audits?taskId={taskId}` 可以按创建时间倒序查询脱敏后的工具审计。
+- 已通过真实异步诊断验证任务成功保存报告，`queryLogs` 审计与任务、故障 id 一致。
+
+当前继续扩展 `queryMetrics`、`queryTrace` 和 `searchRunbook`，逐步把 Java 预先提供证据升级为 Agent 按需获取证据。
+
 ## 开发原则
 
 每次只构建一个可见能力，保证项目持续可演示：
