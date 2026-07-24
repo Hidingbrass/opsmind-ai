@@ -3,7 +3,14 @@
 from pydantic import ValidationError
 
 from app.rag.runbook_search import search_runbooks
-from app.schemas import DiagnosisReport, DiagnosisRequest, LogEntryPayload
+from app.schemas import (
+    DeploymentPayload,
+    DiagnosisReport,
+    DiagnosisRequest,
+    LogEntryPayload,
+    MetricPointPayload,
+    TraceSpanPayload,
+)
 from app.tools.tool_gateway_client import call_tool
 
 
@@ -16,6 +23,7 @@ def _resolve_logs(request: DiagnosisRequest) -> list[LogEntryPayload]:
     tool_result = call_tool(
         task_id=request.taskId,
         incident_id=request.incident.id,
+        trace_id=request.traceId,
         tool_name="queryLogs",
         arguments={"serviceName": request.incident.serviceName},
     )
@@ -37,6 +45,117 @@ def _resolve_logs(request: DiagnosisRequest) -> list[LogEntryPayload]:
         return request.logs
 
 
+def _resolve_metrics(
+    request: DiagnosisRequest,
+) -> list[MetricPointPayload]:
+    """优先通过 Tool Gateway 查询指标，失败时使用 Java 随请求提供的指标。"""
+    if request.taskId is None:
+        return request.metrics
+
+    tool_result = call_tool(
+        task_id=request.taskId,
+        incident_id=request.incident.id,
+        trace_id=request.traceId,
+        tool_name="queryMetrics",
+        arguments={"serviceName": request.incident.serviceName},
+    )
+    if tool_result.status != "SUCCESS" or not isinstance(tool_result.data, list):
+        return request.metrics
+
+    try:
+        return [
+            MetricPointPayload.model_validate(item)
+            for item in tool_result.data
+        ]
+    except ValidationError:
+        return request.metrics
+
+
+def _resolve_traces(
+    request: DiagnosisRequest,
+    logs: list[LogEntryPayload],
+) -> list[TraceSpanPayload]:
+    """使用日志中的 traceId 查询链路，所有工具调用失败时回退到请求内链路。"""
+    if request.taskId is None:
+        return request.traces
+
+    trace_ids = list(dict.fromkeys(log.traceId for log in logs if log.traceId))
+    if not trace_ids:
+        return request.traces
+
+    resolved_traces: list[TraceSpanPayload] = []
+    has_successful_call = False
+    for trace_id in trace_ids[:3]:
+        tool_result = call_tool(
+            task_id=request.taskId,
+            incident_id=request.incident.id,
+            trace_id=request.traceId,
+            tool_name="queryTrace",
+            arguments={"traceId": trace_id},
+        )
+        if tool_result.status != "SUCCESS" or not isinstance(tool_result.data, list):
+            continue
+
+        try:
+            parsed = [
+                TraceSpanPayload.model_validate(item)
+                for item in tool_result.data
+            ]
+        except ValidationError:
+            continue
+
+        has_successful_call = True
+        resolved_traces.extend(parsed)
+
+    return resolved_traces if has_successful_call else request.traces
+
+
+def _resolve_runbooks(
+    request: DiagnosisRequest,
+    query: str,
+) -> list[dict]:
+    """通过可审计工具检索 Runbook，工具边界不可用时退回 Python 本地检索。"""
+    if request.taskId is None:
+        return search_runbooks(query, n_results=2)
+
+    tool_result = call_tool(
+        task_id=request.taskId,
+        incident_id=request.incident.id,
+        trace_id=request.traceId,
+        tool_name="searchRunbook",
+        arguments={"query": query, "nResults": 2},
+    )
+    if tool_result.status != "SUCCESS" or not isinstance(tool_result.data, list):
+        return search_runbooks(query, n_results=2)
+
+    valid_hits = [item for item in tool_result.data if isinstance(item, dict)]
+    return valid_hits or search_runbooks(query, n_results=2)
+
+
+def _resolve_deployments(request: DiagnosisRequest) -> list[DeploymentPayload]:
+    """查询故障服务最近发布记录，失败时返回空列表而不编造变更证据。"""
+    if request.taskId is None:
+        return []
+
+    tool_result = call_tool(
+        task_id=request.taskId,
+        incident_id=request.incident.id,
+        trace_id=request.traceId,
+        tool_name="getRecentDeployments",
+        arguments={"serviceName": request.incident.serviceName},
+    )
+    if tool_result.status != "SUCCESS" or not isinstance(tool_result.data, list):
+        return []
+
+    try:
+        return [
+            DeploymentPayload.model_validate(item)
+            for item in tool_result.data
+        ]
+    except ValidationError:
+        return []
+
+
 def generate_diagnosis(request: DiagnosisRequest) -> DiagnosisReport:
     """诊断单个故障，并返回第一个匹配场景的结构化报告。
 
@@ -47,20 +166,34 @@ def generate_diagnosis(request: DiagnosisRequest) -> DiagnosisReport:
     evidence = []
 
     diagnosis_logs = _resolve_logs(request)
+    diagnosis_metrics = _resolve_metrics(request)
+    diagnosis_traces = _resolve_traces(request, diagnosis_logs)
+    diagnosis_deployments = _resolve_deployments(request)
     # 用事故标题、服务名和故障现象作为检索词，让 RAG 找到最相关的 Runbook。
     runbook_query = (
         f"{request.incident.title} "
         f"{request.incident.serviceName} "
         f"{request.incident.symptom}"
     )
-    runbook_hits = search_runbooks(runbook_query, n_results=2)
+    runbook_hits = _resolve_runbooks(request, runbook_query)
+
+    if diagnosis_deployments:
+        latest_deployment = diagnosis_deployments[0]
+        evidence.append(
+            "最近发布记录: "
+            f"{latest_deployment.serviceName} {latest_deployment.version} "
+            f"({latest_deployment.summary})"
+        )
 
     # 把日志、指标名和 Trace 文本合并成统一信号，后面按关键词判断故障类型。
     all_log_text = " ".join(log.message for log in diagnosis_logs)
-    all_metric_names = " ".join(metric.metricName for metric in request.metrics)
+    all_metric_names = " ".join(
+        metric.metricName
+        for metric in diagnosis_metrics
+    )
     all_trace_text = " ".join(
         f"{span.serviceName} {span.operationName} {span.status} {span.errorMessage or ''}"
-        for span in request.traces
+        for span in diagnosis_traces
     )
 
     # signal_text 是用于场景分类的统一可搜索文本。
@@ -91,12 +224,12 @@ def generate_diagnosis(request: DiagnosisRequest) -> DiagnosisReport:
 
     has_high_latency_metric = any(
         metric.metricName.endswith("p95") and metric.value >= 3000
-        for metric in request.metrics
+        for metric in diagnosis_metrics
     )
 
     has_error_trace = any(
         span.status == "ERROR"
-        for span in request.traces
+        for span in diagnosis_traces
     )
 
     # Redis 故障要优先判断，避免 Redis timeout 被后面的支付超时逻辑误判。
@@ -117,6 +250,7 @@ def generate_diagnosis(request: DiagnosisRequest) -> DiagnosisReport:
 
         return DiagnosisReport(
             incidentId=request.incident.id,
+            traceId=request.traceId,
             summary="检测到 cache-service 存在 Redis 连接异常，缓存能力受损。",
             rootCause="Redis 实例不可达或连接池耗尽，导致缓存读取失败。",
             evidence=evidence,
@@ -142,6 +276,7 @@ def generate_diagnosis(request: DiagnosisRequest) -> DiagnosisReport:
 
         return DiagnosisReport(
             incidentId=request.incident.id,
+            traceId=request.traceId,
             summary=f"检测到 {request.incident.serviceName} 存在数据库慢查询，接口延迟明显升高。",
             rootCause="订单查询 SQL 缺少合适索引或扫描行数过多，导致数据库查询耗时升高。",
             evidence=evidence,
@@ -172,6 +307,7 @@ def generate_diagnosis(request: DiagnosisRequest) -> DiagnosisReport:
 
     return DiagnosisReport(
         incidentId=request.incident.id,
+        traceId=request.traceId,
         summary=f"检测到 {request.incident.serviceName} 存在异常，故障与支付链路超时高度相关。",
         rootCause="支付服务调用第三方支付网关超时，导致订单结算请求失败。",
         evidence=evidence,

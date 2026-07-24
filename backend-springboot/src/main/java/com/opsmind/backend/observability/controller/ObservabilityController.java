@@ -3,6 +3,7 @@ package com.opsmind.backend.observability.controller;
 import java.util.List;
 
 import com.opsmind.backend.common.web.Result;
+import com.opsmind.backend.observability.model.DeploymentRecord;
 import com.opsmind.backend.observability.model.LogEntry;
 import com.opsmind.backend.observability.model.MetricPoint;
 import com.opsmind.backend.observability.model.TraceSpan;
@@ -51,5 +52,13 @@ public class ObservabilityController {
     @GetMapping("/traces/{traceId}")
     public Result<List<TraceSpan>> queryTrace(@PathVariable String traceId) {
         return Result.success(observabilityService.queryTrace(traceId));
+    }
+
+    /** @return 指定服务按时间倒序排列的最近发布记录 */
+    @GetMapping("/deployments")
+    public Result<List<DeploymentRecord>> getRecentDeployments(
+            @RequestParam String serviceName
+    ) {
+        return Result.success(observabilityService.getRecentDeployments(serviceName));
     }
 }

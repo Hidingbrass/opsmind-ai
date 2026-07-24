@@ -1,9 +1,13 @@
 package com.opsmind.backend.diagnosis.service;
 
+import java.time.Duration;
+
 import com.opsmind.backend.diagnosis.dto.DiagnosisTaskEvent;
+import com.opsmind.backend.diagnosis.dto.DiagnosisTaskResponse;
 import com.opsmind.backend.diagnosis.model.DiagnosisRecord;
 import com.opsmind.backend.diagnosis.model.DiagnosisTask;
 import com.opsmind.backend.diagnosis.repository.DiagnosisTaskRepository;
+import com.opsmind.backend.observability.service.OpsMindMetrics;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -18,16 +22,24 @@ public class DiagnosisTaskExecutor {
     private final DiagnosisService diagnosisService;
     /** 将过程和终态通知已订阅的前端。 */
     private final DiagnosisTaskEventPublisher diagnosisTaskEventPublisher;
+    /** 同步 Redis 任务快照并维护故障去重索引。 */
+    private final DiagnosisTaskCacheService diagnosisTaskCacheService;
+    /** 记录诊断任务成功率与总耗时。 */
+    private final OpsMindMetrics opsMindMetrics;
 
     /** 由 Spring 注入异步执行需要的协作对象。 */
     public DiagnosisTaskExecutor(
             DiagnosisTaskRepository diagnosisTaskRepository,
             DiagnosisService diagnosisService,
-            DiagnosisTaskEventPublisher diagnosisTaskEventPublisher
+            DiagnosisTaskEventPublisher diagnosisTaskEventPublisher,
+            DiagnosisTaskCacheService diagnosisTaskCacheService,
+            OpsMindMetrics opsMindMetrics
     ) {
         this.diagnosisTaskRepository = diagnosisTaskRepository;
         this.diagnosisService = diagnosisService;
         this.diagnosisTaskEventPublisher = diagnosisTaskEventPublisher;
+        this.diagnosisTaskCacheService = diagnosisTaskCacheService;
+        this.opsMindMetrics = opsMindMetrics;
     }
 
     /**
@@ -43,6 +55,7 @@ public class DiagnosisTaskExecutor {
         // 数据库是任务状态的可靠来源，因此先保存状态，再通过 SSE 通知前端。
         task.markRunning();
         diagnosisTaskRepository.save(task);
+        diagnosisTaskCacheService.putTask(DiagnosisTaskResponse.from(task));
         diagnosisTaskEventPublisher.publish(
                 taskId,
                 DiagnosisTaskEvent.running(taskId, "RUNNING", "诊断任务开始执行")
@@ -55,9 +68,19 @@ public class DiagnosisTaskExecutor {
                     DiagnosisTaskEvent.running(taskId, "CALL_AI", "正在调用 AI 诊断服务")
             );
             // 同时传递 taskId 和 incidentId，让 Python 后续调用工具时可以通过归属校验。
-            DiagnosisRecord record = diagnosisService.diagnoseAndSaveRecord(taskId, task.getIncidentId());
+            DiagnosisRecord record = diagnosisService.diagnoseAndSaveRecord(
+                    taskId,
+                    task.getIncidentId(),
+                    task.getTraceId()
+            );
             task.markSuccess(record.getId());
             diagnosisTaskRepository.save(task);
+            diagnosisTaskCacheService.putTask(DiagnosisTaskResponse.from(task));
+            diagnosisTaskCacheService.finishTask(task.getIncidentId(), true);
+            opsMindMetrics.taskFinished(
+                    true,
+                    Duration.between(task.getStartedAt(), task.getFinishedAt())
+            );
             diagnosisTaskEventPublisher.publish(
                     taskId,
                     DiagnosisTaskEvent.success(taskId, record.getId())
@@ -68,6 +91,12 @@ public class DiagnosisTaskExecutor {
                     : ex.getMessage();
             task.markFailed(failureReason);
             diagnosisTaskRepository.save(task);
+            diagnosisTaskCacheService.putTask(DiagnosisTaskResponse.from(task));
+            diagnosisTaskCacheService.finishTask(task.getIncidentId(), false);
+            opsMindMetrics.taskFinished(
+                    false,
+                    Duration.between(task.getStartedAt(), task.getFinishedAt())
+            );
             diagnosisTaskEventPublisher.publish(
                     taskId,
                     DiagnosisTaskEvent.failed(taskId, failureReason)

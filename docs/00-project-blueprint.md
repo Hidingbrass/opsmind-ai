@@ -2,7 +2,7 @@
 
 ## 一句话介绍
 
-OpsMind AI 是一个面向微服务系统的 AI SRE 故障诊断平台。它通过 Spring Boot 后端任务编排、Python AI Agent、可观测性数据、Runbook RAG 和 Function Calling，完成从故障注入到根因分析、修复建议和事故复盘的完整闭环。
+OpsMind AI 是一个面向微服务系统的 AI SRE 故障诊断平台。它通过 Spring Boot 后端任务编排、Python 多工具诊断工作流、可观测性数据、Runbook RAG 和受控 Tool Calling，完成从故障注入到根因分析、修复建议和事故复盘的完整闭环。
 
 ## 简历定位
 
@@ -11,11 +11,11 @@ OpsMind AI 是一个面向微服务系统的 AI SRE 故障诊断平台。它通�
 - 使用 `Spring Boot` 设计业务后端、任务编排和工具网关。
 - 使用异步任务处理耗时 AI 诊断流程。
 - 使用 `SSE` 实时推送 Agent 诊断过程。
-- 使用 `Redis` 完成缓存、限流、任务状态和事件流增强。
-- 使用 `Resilience4j` 为 AI 服务和下游工具调用提供超时、重试、熔断和限流保护。
+- 使用 `Redis` 完成任务缓存、结果复用、请求限流和重复任务去重。
+- 使用 HTTP 超时与 `Resilience4j` 为 AI 服务调用提供重试、熔断和并发隔离。
 - 使用 `Chroma` 构建运维 Runbook RAG 知识库。
-- 使用 `Function Calling` 实现日志、指标、链路和知识库工具调用。
-- 使用审计落库记录诊断报告、工具调用和模型调用指标。
+- 使用受控 `Tool Calling` 实现日志、指标、链路和知识库工具调用。
+- 使用审计落库记录诊断报告、工具调用和 Python AI 服务调用指标。
 - 使用 `Prometheus`、`Grafana` 和 `OpenTelemetry` 增强系统可观测性。
 - 使用 `Nginx` 和 `Docker Compose` 完成本地多服务部署。
 
@@ -34,7 +34,7 @@ Spring Boot Backend
   业务控制面、任务编排、工具网关、审计、缓存、限流、SSE、熔断保护
 
 Python AI Agent Service
-  多步骤诊断工作流、Runbook RAG、工具调用决策、结构化报告生成
+  多步骤诊断工作流、Runbook RAG、工具取证编排、结构化报告生成
 
 Data and Infra
   MySQL、Redis、Chroma、Prometheus、Grafana、OpenTelemetry
@@ -62,7 +62,7 @@ MVP 不强求一次做完所有工程化能力，但数据模型要为后续异�
 1. 同步诊断升级为异步诊断任务。
 2. 使用 SSE 实时推送任务进度和工具调用过程。
 3. 使用 Tool Gateway 统一执行 AI 工具调用。
-4. 工具调用、模型调用、诊断报告全部审计落库。
+4. 工具调用、Python AI 服务调用、诊断报告全部审计落库。
 5. 使用 Redis 做诊断结果缓存、限流、任务状态和重复任务去重。
 6. 使用 Resilience4j 保护 AI 服务和下游工具调用。
 7. 可选使用 Redis Stream 保存诊断过程事件。
@@ -113,7 +113,7 @@ MVP 不强求一次做完所有工程化能力，但数据模型要为后续异�
 - 工具调用审计。
 - Redis 缓存、限流和任务状态。
 - SSE 诊断过程推送。
-- Resilience4j 熔断、重试、限流和超时控制。
+- HTTP 超时与 Resilience4j 重试、熔断和并发隔离。
 - Prometheus 指标暴露。
 - TraceId 贯穿请求、任务和工具调用。
 
@@ -124,10 +124,10 @@ MVP 不强求一次做完所有工程化能力，但数据模型要为后续异�
 - RAG 文档导入。
 - Chroma 向量检索。
 - 多步骤诊断 Agent 工作流。
-- Function Calling / Tool Calling。
+- 确定性 Tool Calling；后续可插拔外部生成式模型。
 - Prompt 编排。
 - 结构化 JSON 诊断报告。
-- 模型调用成本和延迟统计。
+- Python AI 服务调用状态和延迟统计。
 - AI 诊断质量评测。
 
 ### 模拟微服务
@@ -166,20 +166,20 @@ MVP 不强求一次做完所有工程化能力，但数据模型要为后续异�
 - OpenTelemetry Collector。
 - Docker Compose 一键启动。
 
-## Function Calling 工具
+## Tool Calling 工具
 
-模型应该能够调用这些工具：
+Python 诊断工作流通过 Spring Tool Gateway 调用这些工具：
 
 ```text
-query_logs(service_name, keyword, time_range)
-query_metrics(service_name, metric_name, time_range)
-query_trace(trace_id)
-search_runbook(problem_description)
-get_recent_deployments(service_name)
-generate_incident_report(incident_id)
+queryLogs(serviceName)
+queryMetrics(serviceName)
+queryTrace(traceId)
+searchRunbook(query, nResults)
+getRecentDeployments(serviceName)
+generateIncidentReport(incidentId)
 ```
 
-工具调用必须经过后端 Tool Gateway，不能让模型直接操作数据库或基础设施。
+工具调用必须经过后端 Tool Gateway，Python 服务不能直接操作业务数据库或基础设施。
 
 每次工具调用都应该记录：
 

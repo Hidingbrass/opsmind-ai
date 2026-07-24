@@ -33,6 +33,10 @@ public class ToolCallAudit {
     @Column(length = 36)
     private String incidentId;
 
+    /** 关联入口请求与异步任务的 OpenTelemetry traceId。 */
+    @Column(length = 32)
+    private String traceId;
+
     /** 请求执行的工具名，未知工具也要留痕。 */
     @Column(nullable = false, length = 100)
     private String toolName;
@@ -74,6 +78,7 @@ public class ToolCallAudit {
     public ToolCallAudit(
             String taskId,
             String incidentId,
+            String traceId,
             String toolName,
             String requestPayload,
             String responseSummary,
@@ -83,6 +88,7 @@ public class ToolCallAudit {
     ) {
         this.taskId = taskId;
         this.incidentId = incidentId;
+        this.traceId = traceId;
         this.toolName = toolName;
         this.requestPayload = requestPayload;
         this.responseSummary = responseSummary;
@@ -113,12 +119,17 @@ public class ToolCallAudit {
         return incidentId;
     }
 
+    /** 返回可在 Tempo 和平台审计中检索的 traceId。 */
+    public String getTraceId() {
+        return traceId;
+    }
+
     /** 返回实际请求执行的工具名。 */
     public String getToolName() {
         return toolName;
     }
 
-    /** 返回经过序列化和脱敏处理的工具请求参数。 */
+    /** 返回内部序列化请求；对外 DTO 不暴露该字段。 */
     public String getRequestPayload() {
         return requestPayload;
     }

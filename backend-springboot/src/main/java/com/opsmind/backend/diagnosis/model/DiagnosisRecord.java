@@ -27,6 +27,10 @@ public class DiagnosisRecord {
     @Column(nullable = false, length = 36)
     private String incidentId;
 
+    /** 生成本报告时对应的完整诊断链路 id。 */
+    @Column(length = 32)
+    private String traceId;
+
     /** 面向用户的简短诊断摘要。 */
     @Column(nullable = false, length = 1000)
     private String summary;
@@ -58,6 +62,7 @@ public class DiagnosisRecord {
     /** 根据 AI 报告内容创建待持久化的诊断记录。 */
     public DiagnosisRecord(
             String incidentId,
+            String traceId,
             String summary,
             String rootCause,
             String evidenceJson,
@@ -65,6 +70,7 @@ public class DiagnosisRecord {
             double confidence
     ) {
         this.incidentId = incidentId;
+        this.traceId = traceId;
         this.summary = summary;
         this.rootCause = rootCause;
         this.evidenceJson = evidenceJson;
@@ -87,6 +93,11 @@ public class DiagnosisRecord {
     /** @return 关联故障 id */
     public String getIncidentId() {
         return incidentId;
+    }
+
+    /** @return 串联任务、工具和 AI 调用的 OpenTelemetry traceId */
+    public String getTraceId() {
+        return traceId;
     }
 
     /** @return 诊断摘要 */

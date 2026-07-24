@@ -9,6 +9,11 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   mysql:
     image: mysql:8.4
@@ -22,6 +27,11 @@ services:
       MYSQL_PASSWORD: opsmind_password
     volumes:
       - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   chroma:
     image: chromadb/chroma:0.5.23
@@ -34,8 +44,135 @@ services:
       ANONYMIZED_TELEMETRY: "FALSE"
     volumes:
       - chroma-data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ai-agent:
+    build:
+      context: ./ai-agent-service
+    container_name: opsmind-ai-agent
+    environment:
+      OPSMIND_BACKEND_BASE_URL: http://backend:8080
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - huggingface-data:/models/huggingface
+    depends_on:
+      chroma:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/ai/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend-springboot
+    container_name: opsmind-backend
+    environment:
+      OPSMIND_DB_URL: jdbc:mysql://mysql:3306/opsmind?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      OPSMIND_DB_USERNAME: opsmind
+      OPSMIND_DB_PASSWORD: opsmind_password
+      OPSMIND_REDIS_HOST: redis
+      OPSMIND_REDIS_PORT: 6379
+      OPSMIND_AI_BASE_URL: http://ai-agent:8000
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-agent:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend-dashboard
+    container_name: opsmind-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: opsmind-prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  tempo:
+    image: grafana/tempo:2.10.5
+    container_name: opsmind-tempo
+    command: ["-config.file=/etc/tempo.yml"]
+    volumes:
+      - ./observability/tempo.yml:/etc/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.153.0
+    container_name: opsmind-otel-collector
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      tempo:
+        condition: service_started
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: opsmind-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: opsmind
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      tempo:
+        condition: service_started
 
 volumes:
   redis-data:
   mysql-data:
   chroma-data:
+  huggingface-data:
+  grafana-data:
+  tempo-data:

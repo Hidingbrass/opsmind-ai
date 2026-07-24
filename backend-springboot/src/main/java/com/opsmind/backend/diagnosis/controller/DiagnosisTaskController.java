@@ -3,10 +3,12 @@ package com.opsmind.backend.diagnosis.controller;
 import com.opsmind.backend.common.web.Result;
 import com.opsmind.backend.diagnosis.dto.DiagnosisTaskResponse;
 import com.opsmind.backend.diagnosis.service.DiagnosisTaskService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -30,14 +32,31 @@ public class DiagnosisTaskController {
      * @return 包含 taskId 的任务快照
      */
     @PostMapping("/incidents/{incidentId}")
-    public Result<DiagnosisTaskResponse> createTask(@PathVariable String incidentId) {
-        return Result.success(diagnosisTaskService.createTask(incidentId));
+    public Result<DiagnosisTaskResponse> createTask(
+            @PathVariable String incidentId,
+            HttpServletRequest request
+    ) {
+        return Result.success(
+                diagnosisTaskService.createTask(incidentId, resolveClientKey(request))
+        );
     }
 
     /** @return 数据库中当前任务状态，可作为 SSE 的可靠兜底 */
     @GetMapping("/{taskId}")
     public Result<DiagnosisTaskResponse> getTask(@PathVariable String taskId) {
         return Result.success(diagnosisTaskService.getTask(taskId));
+    }
+
+    /**
+     * 查询某个故障最近一次诊断任务。没有历史任务时 data 为 null，而不是返回 404。
+     */
+    @GetMapping
+    public Result<DiagnosisTaskResponse> getLatestTask(
+            @RequestParam String incidentId
+    ) {
+        return Result.success(
+                diagnosisTaskService.getLatestTaskForIncident(incidentId).orElse(null)
+        );
     }
 
     /**
@@ -52,5 +71,14 @@ public class DiagnosisTaskController {
     )
     public SseEmitter subscribeEvents(@PathVariable String taskId) {
         return diagnosisTaskService.subscribeEvents(taskId);
+    }
+
+    /** 优先使用反向代理传递的客户端地址，为 Redis 限流生成稳定键。 */
+    private String resolveClientKey(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

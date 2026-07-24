@@ -1,6 +1,8 @@
 package com.opsmind.backend.common.exception;
 
 import com.opsmind.backend.common.web.Result;
+import com.opsmind.backend.diagnosis.service.DiagnosisRateLimitExceededException;
+import com.opsmind.backend.diagnosis.service.DiagnosisTaskConflictException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,6 +15,26 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /** 将诊断限流转换为标准 HTTP 429，前端可提示用户稍后重试。 */
+    @ExceptionHandler(DiagnosisRateLimitExceededException.class)
+    public ResponseEntity<Result<Void>> handleRateLimit(
+            DiagnosisRateLimitExceededException ex
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Result.failure(429, ex.getMessage()));
+    }
+
+    /** 并发去重窗口返回 HTTP 409，调用方可稍后重试而不是误认为系统故障。 */
+    @ExceptionHandler(DiagnosisTaskConflictException.class)
+    public ResponseEntity<Result<Void>> handleTaskConflict(
+            DiagnosisTaskConflictException ex
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Result.failure(409, ex.getMessage()));
+    }
 
     /**
      * 处理参数错误、资源不存在等可预期的业务拒绝。

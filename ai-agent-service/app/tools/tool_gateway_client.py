@@ -1,6 +1,8 @@
 """Python 诊断流程调用 Spring Tool Gateway 的 HTTP 客户端边界。"""
 
+import logging
 import os
+import secrets
 import time
 from typing import Any
 
@@ -10,14 +12,20 @@ from pydantic import ValidationError
 from app.schemas import ToolExecutionResult
 
 
+logger = logging.getLogger(__name__)
+
 # 本地开发默认访问 8080；Docker 部署时可通过环境变量改成后端容器地址。
 BACKEND_BASE_URL = os.getenv(
     "OPSMIND_BACKEND_BASE_URL",
     "http://127.0.0.1:8080",
 )
 
-# 单个工具调用最多等待 5 秒，避免下游异常长期占用诊断线程。
-TOOL_TIMEOUT_SECONDS = 5.0
+# 普通观测工具应快速返回，避免下游异常长期占用诊断线程。
+TOOL_TIMEOUT_SECONDS = float(os.getenv("OPSMIND_TOOL_TIMEOUT_SECONDS", "5"))
+# Runbook 首次检索需要加载 embedding 模型，冷启动使用更宽松的独立超时。
+RUNBOOK_TOOL_TIMEOUT_SECONDS = float(
+    os.getenv("OPSMIND_RUNBOOK_TOOL_TIMEOUT_SECONDS", "25")
+)
 
 
 def _build_failed_result(
@@ -40,6 +48,7 @@ def _build_failed_result(
 def call_tool(
     task_id: str,
     incident_id: str,
+    trace_id: str | None,
     tool_name: str,
     arguments: dict[str, Any],
 ) -> ToolExecutionResult:
@@ -55,11 +64,24 @@ def call_tool(
     try:
         url = BACKEND_BASE_URL.rstrip("/") + "/api/tools/execute"
 
-        response = httpx.post(
-            url,
-            json=request_payload,
-            timeout=TOOL_TIMEOUT_SECONDS,
+        timeout_seconds = (
+            RUNBOOK_TOOL_TIMEOUT_SECONDS
+            if tool_name == "searchRunbook"
+            else TOOL_TIMEOUT_SECONDS
         )
+        headers = {}
+        if trace_id and len(trace_id) == 32:
+            # W3C traceparent 让 Spring 将 Python 回调识别为同一条分布式 Trace。
+            headers["traceparent"] = f"00-{trace_id}-{secrets.token_hex(8)}-01"
+            headers["X-Trace-Id"] = trace_id
+
+        # 内部服务地址必须直连；开发机代理若接管 localhost，会返回与后端无关的 502。
+        with httpx.Client(trust_env=False, timeout=timeout_seconds) as client:
+            response = client.post(
+                url,
+                json=request_payload,
+                headers=headers,
+            )
 
         # HTTP 不是 2xx 时直接抛出 httpx 异常。
         response.raise_for_status()
@@ -81,24 +103,46 @@ def call_tool(
         # 将普通字典校验并转换成诊断流程需要的结构化对象。
         return ToolExecutionResult.model_validate(tool_result_data)
     except httpx.TimeoutException:
+        logger.warning(
+            "调用 Spring Tool Gateway 超时，toolName=%s, baseUrl=%s",
+            tool_name,
+            BACKEND_BASE_URL,
+        )
         return _build_failed_result(
             tool_name,
             "调用 Spring Tool Gateway 超时",
             started_at,
         )
     except httpx.HTTPStatusError as exc:
+        logger.warning(
+            "Spring Tool Gateway 返回非 2xx 状态，toolName=%s, baseUrl=%s, status=%s",
+            tool_name,
+            BACKEND_BASE_URL,
+            exc.response.status_code,
+        )
         return _build_failed_result(
             tool_name,
             f"Spring Tool Gateway HTTP 状态异常: {exc.response.status_code}",
             started_at,
         )
-    except httpx.RequestError:
+    except httpx.RequestError as exc:
+        logger.warning(
+            "无法连接 Spring Tool Gateway，toolName=%s, baseUrl=%s, error=%s",
+            tool_name,
+            BACKEND_BASE_URL,
+            exc,
+        )
         return _build_failed_result(
             tool_name,
             "无法连接 Spring Tool Gateway",
             started_at,
         )
     except (ValueError, ValidationError) as exc:
+        logger.warning(
+            "Spring Tool Gateway 响应合同无效，toolName=%s, error=%s",
+            tool_name,
+            exc,
+        )
         return _build_failed_result(
             tool_name,
             f"Spring Tool Gateway 响应无效: {exc}",

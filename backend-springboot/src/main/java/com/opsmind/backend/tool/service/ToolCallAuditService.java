@@ -50,8 +50,13 @@ public class ToolCallAuditService {
      *
      * @param request  AI Agent 发来的工具调用请求
      * @param response Tool Gateway 已经确定的成功或失败响应
+     * @param traceId 任务创建时保存的 OpenTelemetry traceId
      */
-    public void record(ToolExecutionRequest request, ToolExecutionResponse response) {
+    public void record(
+            ToolExecutionRequest request,
+            ToolExecutionResponse response,
+            String traceId
+    ) {
         String responseSummary = null;
         ToolCallStatus auditStatus;
         try {
@@ -80,6 +85,7 @@ public class ToolCallAuditService {
             ToolCallAudit audit = new ToolCallAudit(
                     taskId,
                     incidentId,
+                    traceId,
                     toolName,
                     json,
                     responseSummary,

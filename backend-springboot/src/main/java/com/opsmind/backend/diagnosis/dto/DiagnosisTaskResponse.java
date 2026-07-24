@@ -10,6 +10,7 @@ import com.opsmind.backend.diagnosis.model.DiagnosisTaskStatus;
  *
  * @param id 前端查询状态和订阅 SSE 使用的 taskId
  * @param incidentId 该任务诊断的故障 id
+ * @param traceId 串联入口、异步任务、工具和 AI 调用的链路 id
  * @param status 任务持久化状态
  * @param diagnosisRecordId 成功后关联的最终报告 id
  * @param failureReason 失败时保存的可读原因
@@ -21,6 +22,7 @@ import com.opsmind.backend.diagnosis.model.DiagnosisTaskStatus;
 public record DiagnosisTaskResponse(
         String id,
         String incidentId,
+        String traceId,
         DiagnosisTaskStatus status,
         String diagnosisRecordId,
         String failureReason,
@@ -39,6 +41,7 @@ public record DiagnosisTaskResponse(
         return new DiagnosisTaskResponse(
                 task.getId(),
                 task.getIncidentId(),
+                task.getTraceId(),
                 task.getStatus(),
                 task.getDiagnosisRecordId(),
                 task.getFailureReason(),

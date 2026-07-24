@@ -8,6 +8,7 @@ import java.util.List;
  *
  * @param id 诊断记录 id
  * @param incidentId 关联故障 id
+ * @param traceId 报告对应的 OpenTelemetry 调用链 id
  * @param summary 诊断摘要
  * @param rootCause 根因
  * @param evidence 已从数据库 JSON 字符串还原的证据列表
@@ -18,6 +19,7 @@ import java.util.List;
 public record DiagnosisRecordResponse(
         String id,
         String incidentId,
+        String traceId,
         String summary,
         String rootCause,
         List<String> evidence,

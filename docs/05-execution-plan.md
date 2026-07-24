@@ -34,57 +34,25 @@ MVP 版本：先做完整闭环，约 2-3 周。
 
 ## 当前进度快照
 
-更新时间：2026-07-24。
+更新时间：2026-07-25。
 
 已经完成：
 
-- Spring Boot 后端骨架、统一响应结构和全局异常处理。
-- Incident 故障事件模块。
-- Fault Scenario 故障注入模块。
-- 模拟日志、指标、链路追踪查询接口。
-- Spring Boot 调用 Python FastAPI AI 服务。
-- AI 诊断报告生成、保存到 MySQL、按故障查询历史诊断记录。
-- Chroma 本地知识库基础结构。
-- `payment-timeout` Runbook 文档。
-- `redis-connection-failure` Runbook 文档。
-- `database-slow-query` Runbook 文档。
-- 使用 `BAAI/bge-small-zh-v1.5` 中文 embedding 模型写入 Chroma。
-- Runbook 知识库检索接口：`GET /ai/runbooks/search`。
-- `/ai/diagnose` 已接入 Runbook RAG 检索，诊断证据中包含知识库命中来源。
-- 支付超时、Redis 连接失败、数据库慢查询三场景观测数据。
-- `/ai/diagnose` 已能按三类故障场景返回不同根因报告。
-- Spring Boot 端三场景诊断接口均能保存 RAG 增强报告。
-- 异步诊断任务第一版闭环已跑通：创建任务立即返回 `taskId`，后台执行 AI 诊断，成功后写入 `diagnosisRecordId`，失败后写入 `failureReason`。
-- SSE 后端闭环已跑通：支持按 `taskId` 订阅、当前状态快照、`RUNNING` / `CALL_AI` 过程事件和 `SUCCESS` / `FAILED` 终态事件。
-- 已使用 curl 验证 SSE 成功与失败终态均与数据库一致，终态推送后连接自动关闭。
-- Spring Boot Tool Gateway 已完成 `queryLogs` 白名单分发、通用参数校验、任务与故障归属校验和结构化失败返回。
-- 工具调用审计写入闭环已完成：成功只保存结果摘要，失败保存原因，并记录请求、状态和耗时。
-- 已用 curl 和 MySQL 验证 `queryLogs` 成功审计与未知工具失败审计均真实落库，数据库记录与接口响应一致。
-- 工具审计查询接口已完成：支持按 `taskId` 倒序查询，并通过 DTO 隐藏原始请求参数。
-- Java 已将异步诊断 `taskId` 传入 Python，Python Tool Client 支持环境变量地址、超时和结构化失败。
-- Python 诊断流程已主动调用 `queryLogs`，工具失败时降级使用已有日志，不中断诊断。
-- 已通过真实异步任务验收 Agent 工具闭环：任务成功保存报告，审计中的任务、故障和工具结果一致。
-
-当前正在进行：
-
-```text
-增强版本阶段 7：Function Calling 和工具调用审计
-```
-
-当前验收重点：
-
-```text
-1. 在 `queryLogs` 模式上补充 `queryMetrics` 工具。
-2. 继续补充 `queryTrace` 和 `searchRunbook` 工具。
-3. 让诊断结论显式使用多种工具返回的结构化证据。
-```
-
-下一步：
-
-```text
-沿用已验收的 Tool Gateway、审计和 Python Client 边界，完成 `queryMetrics` 闭环。
-然后继续补充链路和 Runbook 工具，让 Agent 按需获取多类证据。
-```
+- 支付超时、Redis 连接失败、数据库慢查询三场景及完整证据数据。
+- 三份 Runbook、中文 embedding、Chroma 检索和知识库来源引用。
+- 异步任务、SSE 过程与终态、诊断报告落库和页面刷新恢复。
+- `queryLogs`、`queryMetrics`、`queryTrace`、`searchRunbook`、
+  `getRecentDeployments`、`generateIncidentReport` 六个白名单工具。
+- 工具和 Python AI 服务调用审计，支持按任务倒序查询和对外脱敏。
+- Redis 任务缓存、结果复用、固定窗口限流和分布式去重锁。
+- Resilience4j 超时、重试、熔断、并发隔离和友好 fallback。
+- Prometheus 业务指标、Grafana Dashboard、W3C Trace Context 和 OTLP 配置。
+- React 控制台、事故复盘、桌面与移动端布局验收。
+- 三场景真实 HTTP 自动评测，当前结果 `3/3 PASS`。
+- 后端、AI、前端 Dockerfile，Nginx 和完整 Docker Compose。
+- Docker Compose 10 个服务完整启动并通过对外入口检查。
+- 新诊断任务的 `traceId` 已在 Tempo 查询到完整跨服务 Span。
+- README、路线图和简历材料已按真实实现边界完成校准。
 
 ## 架构升级方向
 
@@ -99,7 +67,7 @@ MVP 版本：先做完整闭环，约 2-3 周。
        -> Tool Gateway 诊断工具网关
        -> Audit 诊断审计模块
        -> SSE 诊断过程推送模块
-       -> Redis 缓存、限流、任务状态、事件流
+       -> Redis 缓存、限流、任务状态、结果复用和去重锁
        -> MySQL 持久化故障、诊断报告、工具调用记录
        -> Resilience4j 保护 AI 服务和下游工具调用
   -> Python AI Agent 服务
@@ -107,7 +75,7 @@ MVP 版本：先做完整闭环，约 2-3 周。
        -> Runbook RAG 检索
        -> Function Calling / Tool Calling
        -> 结构化 JSON 诊断报告
-       -> 模型调用成本和延迟统计
+       -> Python AI 服务调用状态和延迟统计
   -> Chroma 运维知识库
   -> Prometheus / Grafana / OpenTelemetry 可观测性增强
 ```
@@ -116,9 +84,9 @@ MVP 版本：先做完整闭环，约 2-3 周。
 
 - 异步诊断任务。
 - SSE 实时诊断进度。
-- Redis 缓存、限流、任务状态和事件流。
-- Resilience4j 熔断、重试、限流和超时控制。
-- 诊断记录、工具调用、模型调用审计落库。
+- Redis 缓存、限流、任务状态、结果复用和去重锁。
+- HTTP 超时与 Resilience4j 重试、熔断和并发隔离。
+- 诊断记录、工具调用、Python AI 服务调用审计落库。
 - Prometheus 指标和 OpenTelemetry TraceId 串联。
 
 AI 主线：
@@ -128,7 +96,7 @@ AI 主线：
 - 结构化诊断报告 JSON Schema。
 - Runbook RAG 引用证据。
 - AI 诊断质量评测集。
-- 模型调用成本和延迟统计。
+- Python AI 服务调用状态和延迟统计。
 
 ## MVP 版本：完成可演示闭环
 
@@ -420,13 +388,14 @@ GET /api/diagnosis-tasks/{taskId}/events
 
 - SSE 让 Agent 过程透明化，用户能看到系统不是黑盒输出一段话。
 
-### 阶段 7：Function Calling 和工具调用审计
+### 阶段 7：Tool Calling 和工具调用审计
 
 预计时间：4-6 天。
 
-当前状态：`queryLogs` Tool Gateway、成功/失败审计、审计查询接口和 Python Agent 主动调用均已完成并通过真实异步任务验收。
+当前状态：六个白名单工具、成功/失败审计、审计查询接口和 Python 主动调用均已完成，并通过三场景真实异步评测。
 
-目标：让 AI Agent 自己决定调用日志、指标、链路、Runbook 和发布记录工具，并记录每次工具调用。
+目标：让 Python 诊断工作流经过受控 Tool Gateway 获取日志、指标、链路、
+Runbook 和发布记录，并记录每次工具调用。
 
 要完成的工具：
 
@@ -468,11 +437,14 @@ createdAt
 - 每一次工具调用都能在数据库和前端时间线中看到。
 - 工具失败时，Agent 能继续使用已有证据生成谨慎结论。
 
+当前默认采用确定性工具调用顺序，保证无外部 API Key 时也能稳定演示和评测；
+不把它描述成“外部大模型自主 Function Calling”。
+
 学习重点：
 
-- Function Calling 是让模型调用后端函数，不只是输出文字。
-- 工具网关为什么要由后端控制。
-- AI Agent 为什么需要审计。
+- 工具调用为什么必须经过后端权限边界。
+- 动态工具参数如何做类型、归属和白名单校验。
+- AI 工作流为什么需要成功与失败审计。
 
 面试可讲点：
 
@@ -724,10 +696,7 @@ Resilience4j 超时和熔断
 
 ```text
 Redis Stream 诊断事件流
-OpenTelemetry TraceId 串联
-Grafana Dashboard
-AI 诊断质量评测集
-模型调用成本统计
+外部生成式模型与调用成本统计
 GitHub Actions 构建检查
 Testcontainers 集成测试
 ```
@@ -746,8 +715,8 @@ Testcontainers 集成测试
 
 ```text
 必须做：故障注入、观测数据、AI 诊断、Runbook RAG、异步任务、SSE、Redis 限流缓存、工具调用审计。
-加分做：Resilience4j、Prometheus、Grafana、AI 评测集。
-展示即可：OpenTelemetry、Redis Stream、模型成本统计。
+已完成加分项：Resilience4j、Prometheus、Grafana、OpenTelemetry、AI 评测集。
+后续扩展：Redis Stream、外部模型成本统计、CI 和集成测试。
 ```
 
 阶段验收时优先问：
@@ -817,7 +786,7 @@ needHumanConfirmation
 
 ```text
 Spring Boot：业务状态、任务编排、工具网关、审计、限流、熔断、接口边界。
-Python AI Service：模型调用、RAG、Agent 工作流、结构化报告、评测。
+Python AI Service：多工具取证、RAG、结构化报告和评测；外部模型为后续扩展。
 ```
 
 验收标准：
@@ -908,8 +877,8 @@ AI 正在做什么。
 
 ```text
 实现异步诊断任务、SSE 过程推送、工具调用审计和 Redis 缓存限流。
-接入基础 Prometheus 指标，预留 OpenTelemetry TraceId 链路扩展。
-设计 Redis Stream 诊断事件流，用于后续恢复诊断过程。
+接入 Prometheus、Grafana、OpenTelemetry 和 Tempo 完成指标与 TraceId 观测。
+设计 Redis Stream 诊断事件流，作为后续恢复诊断过程的扩展方案。
 ```
 
 最终优先级：
@@ -923,24 +892,13 @@ SSE 展示
 
 这四件事做扎实后，再继续补监控、评测和部署增强。
 
-## 当前下一步
+## 后续演进
 
-当前正在进行：
-
-```text
-增强版本阶段 7：Function Calling 和工具调用审计
-```
-
-下一步应完成：
+当前规划内的 MVP、增强版本和冲刺版本均已完成。继续扩展时可优先考虑：
 
 ```text
-沿用 queryLogs 的网关、校验、审计和客户端模式实现 queryMetrics
-让 Python 诊断流程消费指标工具结果，并在失败时安全降级
-继续扩展 queryTrace 和 searchRunbook
-```
-
-后续进入：
-
-```text
-增强版本阶段 8：Redis 工程化与稳定性保护
+接入真实日志、指标和 Trace 数据源
+增加身份认证、租户隔离和工具权限策略
+把进程内异步执行升级为可恢复的消息队列
+在现有证据合同外接生成式模型，并建立回归评测
 ```

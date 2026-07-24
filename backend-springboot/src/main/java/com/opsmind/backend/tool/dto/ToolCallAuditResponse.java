@@ -14,6 +14,7 @@ import com.opsmind.backend.tool.model.ToolCallStatus;
  * @param id 审计记录 id
  * @param taskId 关联诊断任务 id
  * @param incidentId 关联故障事件 id
+ * @param traceId 关联完整诊断链路的 OpenTelemetry traceId
  * @param toolName 实际尝试执行的工具名
  * @param responseSummary 成功时的结果摘要，不包含完整工具响应
  * @param status 工具执行成功或失败
@@ -25,6 +26,7 @@ public record ToolCallAuditResponse(
         String id,
         String taskId,
         String incidentId,
+        String traceId,
         String toolName,
         String responseSummary,
         ToolCallStatus status,
@@ -43,6 +45,7 @@ public record ToolCallAuditResponse(
                 audit.getId(),
                 audit.getTaskId(),
                 audit.getIncidentId(),
+                audit.getTraceId(),
                 audit.getToolName(),
                 audit.getResponseSummary(),
                 audit.getStatus(),

@@ -1,6 +1,7 @@
 package com.opsmind.backend.common.config;
 
 import java.net.http.HttpClient;
+import java.time.Duration;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,14 +23,19 @@ public class RestClientConfig {
      * @return 全局复用的 HTTP 客户端
      */
     @Bean
-    public RestClient restClient() {
+    public RestClient restClient(RestClient.Builder builder) {
         // 显式使用 HTTP/1.1，与当前本地 FastAPI 服务的调用环境保持简单兼容。
         HttpClient httpClient = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(Duration.ofSeconds(3))
                 .build();
 
-        return RestClient.builder()
-                .requestFactory(new JdkClientHttpRequestFactory(httpClient))
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofSeconds(30));
+
+        // 使用 Boot 自动配置的 Builder，保留 HTTP 客户端 Observation 和 traceparent 传播。
+        return builder
+                .requestFactory(requestFactory)
                 .build();
     }
 }

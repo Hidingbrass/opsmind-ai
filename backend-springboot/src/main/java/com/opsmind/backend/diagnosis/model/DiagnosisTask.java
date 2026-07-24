@@ -31,6 +31,10 @@ public class DiagnosisTask {
     @Column(nullable = false, length = 36)
     private String incidentId;
 
+    /** 串联入口请求、异步执行、工具调用、AI 调用和最终报告的 OpenTelemetry traceId。 */
+    @Column(length = 32)
+    private String traceId;
+
     /** 当前任务状态，数据库是该状态的可靠来源。 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -62,9 +66,13 @@ public class DiagnosisTask {
     protected DiagnosisTask() {
     }
 
-    /** @param incidentId 要诊断的故障事件 id */
-    public DiagnosisTask(String incidentId) {
+    /**
+     * @param incidentId 要诊断的故障事件 id
+     * @param traceId 创建任务的入口请求 traceId
+     */
+    public DiagnosisTask(String incidentId, String traceId) {
         this.incidentId = incidentId;
+        this.traceId = traceId;
     }
 
     /** 新任务落库时默认进入 PENDING，后续由后台执行器推进。 */
@@ -90,6 +98,11 @@ public class DiagnosisTask {
     /** @return 关联故障 id */
     public String getIncidentId() {
         return incidentId;
+    }
+
+    /** @return 贯穿本次诊断全链路的 OpenTelemetry traceId */
+    public String getTraceId() {
+        return traceId;
     }
 
     /** @return 任务当前状态 */

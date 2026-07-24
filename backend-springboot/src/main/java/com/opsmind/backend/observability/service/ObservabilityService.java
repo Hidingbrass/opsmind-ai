@@ -3,6 +3,7 @@ package com.opsmind.backend.observability.service;
 import java.time.Instant;
 import java.util.List;
 
+import com.opsmind.backend.observability.model.DeploymentRecord;
 import com.opsmind.backend.observability.model.LogEntry;
 import com.opsmind.backend.observability.model.MetricPoint;
 import com.opsmind.backend.observability.model.TraceSpan;
@@ -146,6 +147,37 @@ public class ObservabilityService {
                     "slow query, full table scan"
             ));
 
+    /** 与三个演示服务相匹配的最近发布记录，用于排查变更相关性。 */
+    private final List<DeploymentRecord> deployments = List.of(
+            new DeploymentRecord(
+                    Instant.parse("2026-07-05T08:30:00Z"),
+                    "payment-service",
+                    "2.4.1",
+                    "8fd31a2",
+                    "release-bot",
+                    "SUCCESS",
+                    "调整支付网关连接与重试参数"
+            ),
+            new DeploymentRecord(
+                    Instant.parse("2026-07-04T16:00:00Z"),
+                    "cache-service",
+                    "1.8.0",
+                    "14be0cd",
+                    "release-bot",
+                    "SUCCESS",
+                    "升级 Redis 客户端并调整连接池配置"
+            ),
+            new DeploymentRecord(
+                    Instant.parse("2026-07-05T09:40:00Z"),
+                    "order-service",
+                    "3.2.0",
+                    "cd901f4",
+                    "release-bot",
+                    "SUCCESS",
+                    "上线订单列表筛选与排序功能"
+            )
+    );
+
     /**
      * 按服务名返回日志，目前也是 queryLogs Tool 的实际执行方法。
      *
@@ -179,6 +211,19 @@ public class ObservabilityService {
     public List<TraceSpan> queryTrace(String traceId) {
         return traces.stream()
                 .filter(span -> span.traceId().equals(traceId))
+                .toList();
+    }
+
+    /**
+     * 查询某服务最近的发布记录，当前内存数据按时间倒序返回。
+     *
+     * @param serviceName 要排查的服务名
+     * @return 最近发布记录
+     */
+    public List<DeploymentRecord> getRecentDeployments(String serviceName) {
+        return deployments.stream()
+                .filter(deployment -> deployment.serviceName().equals(serviceName))
+                .sorted((left, right) -> right.deployedAt().compareTo(left.deployedAt()))
                 .toList();
     }
 }
