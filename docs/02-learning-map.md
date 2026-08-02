@@ -121,7 +121,7 @@ Java 后端工程能力 > AI Agent 落地能力 > SRE 可观测性知识 > 部�
 
 项目中的用法：
 
-- 当前由确定性诊断工作流选择工具，未来可替换为模型自主选择。
+- 模型决定要调用哪个工具。
 - Spring Boot Tool Gateway 统一执行工具。
 - 工具调用记录入库，前端展示调用时间线。
 
@@ -208,7 +208,7 @@ Java 后端工程能力 > AI Agent 落地能力 > SRE 可观测性知识 > 部�
 7. SSE 实时推送。
 8. Function Calling 和工具网关。
 9. Redis 缓存、限流、任务状态和 Stream。
-10. HTTP 超时与 Resilience4j 重试、熔断和并发隔离。
+10. Resilience4j 超时、重试、熔断和限流。
 11. Prometheus、Grafana 和 OpenTelemetry。
 12. AI 诊断质量评测。
 13. Docker Compose、Nginx 和项目展示。

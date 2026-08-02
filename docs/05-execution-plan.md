@@ -34,25 +34,42 @@ MVP 版本：先做完整闭环，约 2-3 周。
 
 ## 当前进度快照
 
-更新时间：2026-07-25。
+更新时间：2026-07-08。
 
 已经完成：
 
-- 支付超时、Redis 连接失败、数据库慢查询三场景及完整证据数据。
-- 三份 Runbook、中文 embedding、Chroma 检索和知识库来源引用。
-- 异步任务、SSE 过程与终态、诊断报告落库和页面刷新恢复。
-- `queryLogs`、`queryMetrics`、`queryTrace`、`searchRunbook`、
-  `getRecentDeployments`、`generateIncidentReport` 六个白名单工具。
-- 工具和 Python AI 服务调用审计，支持按任务倒序查询和对外脱敏。
-- Redis 任务缓存、结果复用、固定窗口限流和分布式去重锁。
-- Resilience4j 超时、重试、熔断、并发隔离和友好 fallback。
-- Prometheus 业务指标、Grafana Dashboard、W3C Trace Context 和 OTLP 配置。
-- React 控制台、事故复盘、桌面与移动端布局验收。
-- 三场景真实 HTTP 自动评测，当前结果 `3/3 PASS`。
-- 后端、AI、前端 Dockerfile，Nginx 和完整 Docker Compose。
-- Docker Compose 10 个服务完整启动并通过对外入口检查。
-- 新诊断任务的 `traceId` 已在 Tempo 查询到完整跨服务 Span。
-- README、路线图和简历材料已按真实实现边界完成校准。
+- Spring Boot 后端骨架、统一响应结构和全局异常处理。
+- Incident 故障事件模块。
+- Fault Scenario 故障注入模块。
+- 模拟日志、指标、链路追踪查询接口。
+- Spring Boot 调用 Python FastAPI AI 服务。
+- AI 诊断报告生成、保存到 MySQL、按故障查询历史诊断记录。
+- Chroma 本地知识库基础结构。
+- `payment-timeout` Runbook 文档。
+- 使用 `BAAI/bge-small-zh-v1.5` 中文 embedding 模型写入 Chroma。
+- Runbook 知识库检索接口：`GET /ai/runbooks/search`。
+- `/ai/diagnose` 已接入 Runbook RAG 检索，诊断证据中包含知识库命中来源。
+
+当前正在进行：
+
+```text
+MVP 阶段 4：Runbook RAG 知识库接入诊断报告
+```
+
+当前验收重点：
+
+```text
+1. /ai/runbooks/search 能按中文故障现象检索 Runbook。
+2. /ai/diagnose 返回的 evidence 包含知识库命中来源。
+3. Spring Boot 调用 Python AI 服务后，RAG 增强后的诊断报告能保存到 MySQL。
+```
+
+下一步：
+
+```text
+补充更多 Runbook 场景，例如 Redis 连接失败、数据库慢查询。
+然后进入增强版本的异步诊断任务设计。
+```
 
 ## 架构升级方向
 
@@ -67,7 +84,7 @@ MVP 版本：先做完整闭环，约 2-3 周。
        -> Tool Gateway 诊断工具网关
        -> Audit 诊断审计模块
        -> SSE 诊断过程推送模块
-       -> Redis 缓存、限流、任务状态、结果复用和去重锁
+       -> Redis 缓存、限流、任务状态、事件流
        -> MySQL 持久化故障、诊断报告、工具调用记录
        -> Resilience4j 保护 AI 服务和下游工具调用
   -> Python AI Agent 服务
@@ -75,7 +92,7 @@ MVP 版本：先做完整闭环，约 2-3 周。
        -> Runbook RAG 检索
        -> Function Calling / Tool Calling
        -> 结构化 JSON 诊断报告
-       -> Python AI 服务调用状态和延迟统计
+       -> 模型调用成本和延迟统计
   -> Chroma 运维知识库
   -> Prometheus / Grafana / OpenTelemetry 可观测性增强
 ```
@@ -84,9 +101,9 @@ MVP 版本：先做完整闭环，约 2-3 周。
 
 - 异步诊断任务。
 - SSE 实时诊断进度。
-- Redis 缓存、限流、任务状态、结果复用和去重锁。
-- HTTP 超时与 Resilience4j 重试、熔断和并发隔离。
-- 诊断记录、工具调用、Python AI 服务调用审计落库。
+- Redis 缓存、限流、任务状态和事件流。
+- Resilience4j 熔断、重试、限流和超时控制。
+- 诊断记录、工具调用、模型调用审计落库。
 - Prometheus 指标和 OpenTelemetry TraceId 串联。
 
 AI 主线：
@@ -96,7 +113,7 @@ AI 主线：
 - 结构化诊断报告 JSON Schema。
 - Runbook RAG 引用证据。
 - AI 诊断质量评测集。
-- Python AI 服务调用状态和延迟统计。
+- 模型调用成本和延迟统计。
 
 ## MVP 版本：完成可演示闭环
 
@@ -301,17 +318,16 @@ incident context -> search runbook -> cited evidence -> diagnosis report
 要完成的内容：
 
 - `DiagnosisTask` 任务模型。
-- 任务状态：`PENDING`、`RUNNING`、`SUCCESS`、`FAILED`。
+- 任务状态：`PENDING`、`RUNNING`、`SUCCEEDED`、`FAILED`、`CANCELLED`。
 - 创建任务接口。
 - 查询任务状态接口。
 - 后台执行诊断逻辑。
-- 成功时保存 `diagnosisRecordId`。
-- 失败时保存 `failureReason`。
+- 失败原因和重试次数记录。
 
 核心接口：
 
 ```text
-POST /api/diagnosis-tasks/incidents/{incidentId}
+POST /api/incidents/{incidentId}/diagnosis-tasks
 GET  /api/diagnosis-tasks/{taskId}
 ```
 
@@ -319,15 +335,7 @@ GET  /api/diagnosis-tasks/{taskId}
 
 - 创建诊断任务后立即返回 `taskId`。
 - 前端或 curl 可以轮询任务状态。
-- 任务成功后状态变为 `SUCCESS`，并保存 `diagnosisRecordId`。
-- AI 服务异常时任务状态变为 `FAILED`，并保存 `failureReason`。
-
-当前实现状态：
-
-- 已完成 `DiagnosisTask`、`DiagnosisTaskStatus`、`DiagnosisTaskRepository`、`DiagnosisTaskResponse`。
-- 已完成 `DiagnosisTaskController` 和 `DiagnosisTaskService`。
-- 已通过 `@EnableAsync` + `DiagnosisTaskExecutor` 实现后台执行。
-- 已验证异步诊断任务闭环可用。
+- AI 服务异常时任务状态变为 `FAILED` 并记录原因。
 
 学习重点：
 
@@ -342,8 +350,6 @@ GET  /api/diagnosis-tasks/{taskId}
 ### 阶段 6：SSE 实时诊断过程
 
 预计时间：2-3 天。
-
-当前状态：后端 SSE 闭环已完成，前端时间线展示留到控制台阶段实现。
 
 目标：让前端实时看到诊断过程，适合展示 AI Agent 的推理和工具调用步骤。
 
@@ -373,10 +379,8 @@ GET /api/diagnosis-tasks/{taskId}/events
 
 验收方式：
 
-- `GET /api/diagnosis-tasks/{taskId}/events` 能建立 `text/event-stream` 连接。
-- 订阅时立即推送数据库中的当前状态快照，避免快速任务在连接建立前丢失终态。
-- 异步执行器能推送 `RUNNING`、`CALL_AI`、`SUCCESS` 和 `FAILED` 事件。
-- curl 收到的成功或失败终态与任务表一致，推送后 SSE 连接自动关闭。
+- 开始诊断后，页面能实时出现“查询日志、查询指标、检索 Runbook、生成报告”等步骤。
+- 刷新页面后仍能查询到任务最终状态。
 
 学习重点：
 
@@ -388,14 +392,11 @@ GET /api/diagnosis-tasks/{taskId}/events
 
 - SSE 让 Agent 过程透明化，用户能看到系统不是黑盒输出一段话。
 
-### 阶段 7：Tool Calling 和工具调用审计
+### 阶段 7：Function Calling 和工具调用审计
 
 预计时间：4-6 天。
 
-当前状态：六个白名单工具、成功/失败审计、审计查询接口和 Python 主动调用均已完成，并通过三场景真实异步评测。
-
-目标：让 Python 诊断工作流经过受控 Tool Gateway 获取日志、指标、链路、
-Runbook 和发布记录，并记录每次工具调用。
+目标：让 AI Agent 自己决定调用日志、指标、链路、Runbook 和发布记录工具，并记录每次工具调用。
 
 要完成的工具：
 
@@ -437,14 +438,11 @@ createdAt
 - 每一次工具调用都能在数据库和前端时间线中看到。
 - 工具失败时，Agent 能继续使用已有证据生成谨慎结论。
 
-当前默认采用确定性工具调用顺序，保证无外部 API Key 时也能稳定演示和评测；
-不把它描述成“外部大模型自主 Function Calling”。
-
 学习重点：
 
-- 工具调用为什么必须经过后端权限边界。
-- 动态工具参数如何做类型、归属和白名单校验。
-- AI 工作流为什么需要成功与失败审计。
+- Function Calling 是让模型调用后端函数，不只是输出文字。
+- 工具网关为什么要由后端控制。
+- AI Agent 为什么需要审计。
 
 面试可讲点：
 
@@ -696,7 +694,10 @@ Resilience4j 超时和熔断
 
 ```text
 Redis Stream 诊断事件流
-外部生成式模型与调用成本统计
+OpenTelemetry TraceId 串联
+Grafana Dashboard
+AI 诊断质量评测集
+模型调用成本统计
 GitHub Actions 构建检查
 Testcontainers 集成测试
 ```
@@ -715,8 +716,8 @@ Testcontainers 集成测试
 
 ```text
 必须做：故障注入、观测数据、AI 诊断、Runbook RAG、异步任务、SSE、Redis 限流缓存、工具调用审计。
-已完成加分项：Resilience4j、Prometheus、Grafana、OpenTelemetry、AI 评测集。
-后续扩展：Redis Stream、外部模型成本统计、CI 和集成测试。
+加分做：Resilience4j、Prometheus、Grafana、AI 评测集。
+展示即可：OpenTelemetry、Redis Stream、模型成本统计。
 ```
 
 阶段验收时优先问：
@@ -786,7 +787,7 @@ needHumanConfirmation
 
 ```text
 Spring Boot：业务状态、任务编排、工具网关、审计、限流、熔断、接口边界。
-Python AI Service：多工具取证、RAG、结构化报告和评测；外部模型为后续扩展。
+Python AI Service：模型调用、RAG、Agent 工作流、结构化报告、评测。
 ```
 
 验收标准：
@@ -877,8 +878,8 @@ AI 正在做什么。
 
 ```text
 实现异步诊断任务、SSE 过程推送、工具调用审计和 Redis 缓存限流。
-接入 Prometheus、Grafana、OpenTelemetry 和 Tempo 完成指标与 TraceId 观测。
-设计 Redis Stream 诊断事件流，作为后续恢复诊断过程的扩展方案。
+接入基础 Prometheus 指标，预留 OpenTelemetry TraceId 链路扩展。
+设计 Redis Stream 诊断事件流，用于后续恢复诊断过程。
 ```
 
 最终优先级：
@@ -892,13 +893,25 @@ SSE 展示
 
 这四件事做扎实后，再继续补监控、评测和部署增强。
 
-## 后续演进
+## 当前下一步
 
-当前规划内的 MVP、增强版本和冲刺版本均已完成。继续扩展时可优先考虑：
+当前正在进行：
 
 ```text
-接入真实日志、指标和 Trace 数据源
-增加身份认证、租户隔离和工具权限策略
-把进程内异步执行升级为可恢复的消息队列
-在现有证据合同外接生成式模型，并建立回归评测
+MVP 阶段 4：Runbook RAG 知识库接入诊断报告
+```
+
+下一步应完成：
+
+```text
+验证 /ai/diagnose 返回知识库证据
+验证 Spring Boot 端诊断接口能保存 RAG 增强报告
+补充 Redis 连接失败和数据库慢查询 Runbook
+Git 提交并推送
+```
+
+完成后进入：
+
+```text
+增强版本阶段 5：异步诊断任务
 ```
