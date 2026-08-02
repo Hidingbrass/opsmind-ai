@@ -2,7 +2,7 @@
 
 ## 一句话介绍
 
-OpsMind AI 是一个面向微服务系统的 AI SRE 故障诊断平台。它通过 Spring Boot 后端任务编排、Python 多工具诊断工作流、可观测性数据、Runbook RAG 和受控 Tool Calling，完成从故障注入到根因分析、修复建议和事故复盘的完整闭环。
+OpsMind AI 是一个面向微服务系统的 AI SRE 故障诊断平台。它通过 Spring Boot 后端任务编排、Python 双模式诊断 Agent、混合 Runbook RAG 和受控 Tool Calling，完成从故障注入到根因分析、修复建议和事故复盘的完整闭环。
 
 ## 简历定位
 
@@ -13,9 +13,10 @@ OpsMind AI 是一个面向微服务系统的 AI SRE 故障诊断平台。它通�
 - 使用 `SSE` 实时推送 Agent 诊断过程。
 - 使用 `Redis` 完成任务缓存、结果复用、请求限流和重复任务去重。
 - 使用 HTTP 超时与 `Resilience4j` 为 AI 服务调用提供重试、熔断和并发隔离。
-- 使用 `Chroma` 构建运维 Runbook RAG 知识库。
-- 使用受控 `Tool Calling` 实现日志、指标、链路和知识库工具调用。
-- 使用审计落库记录诊断报告、工具调用和 Python AI 服务调用指标。
+- 使用 `Chroma + BM25 + RRF` 构建混合 Runbook RAG，并用固定数据集评估排序质量。
+- 默认使用确定性工作流稳定演示，可选接入 OpenAI-compatible 模型自主选择只读工具。
+- 使用受控 `Tool Calling` 实现日志、指标、链路、知识库和发布记录取证。
+- 使用审计落库记录诊断报告、工具调用、执行模式、模型版本和 Token 用量。
 - 使用 `Prometheus`、`Grafana` 和 `OpenTelemetry` 增强系统可观测性。
 - 使用 `Nginx` 和 `Docker Compose` 完成本地多服务部署。
 
@@ -34,7 +35,7 @@ Spring Boot Backend
   业务控制面、任务编排、工具网关、审计、缓存、限流、SSE、熔断保护
 
 Python AI Agent Service
-  多步骤诊断工作流、Runbook RAG、工具取证编排、结构化报告生成
+  确定性/LLM 双执行模式、混合 Runbook RAG、工具取证编排、结构化报告生成
 
 Data and Infra
   MySQL、Redis、Chroma、Prometheus、Grafana、OpenTelemetry
@@ -77,6 +78,19 @@ MVP 不强求一次做完所有工程化能力，但数据模型要为后续异�
 4. 使用 OpenTelemetry TraceId 串联请求、任务、工具调用和日志。
 5. 建立小型 AI 诊断质量评测集。
 6. 完成前端控制台、部署文档、架构图、演示脚本和面试材料。
+
+## v1.1 当前状态
+
+截至 2026-08-02，MVP、增强版和冲刺版已经完成，v1.1 进一步补齐：
+
+- `deterministic` 与 `llm` 双执行模式，以及模型失败后的显式 `LLM_FALLBACK`。
+- 五个模型可调用的只读工具；报告生成由受信代码完成，不向模型暴露写操作。
+- 服务、事故和 trace 归属校验，Prompt Injection 提示隔离和工具调用上限。
+- 9 份 Runbook、45 个切片、Dense + BM25 + RRF 混合检索。
+- 24 条 RAG 排名评测、3 个端到端诊断场景和单元/集成回归测试。
+- 执行模式、provider、model、promptVersion、Token 和工具调用数全链路审计与前端展示。
+
+默认模式已经完成全栈实测；LLM 模式已完成客户端与工具循环的 mock 测试，仍需使用真实供应商 API Key 做上线前验收。
 
 ## 主要故障场景
 
@@ -122,9 +136,10 @@ MVP 不强求一次做完所有工程化能力，但数据模型要为后续异�
 职责：
 
 - RAG 文档导入。
-- Chroma 向量检索。
+- Chroma Dense 检索、BM25 词法检索和 RRF 融合排序。
 - 多步骤诊断 Agent 工作流。
-- 确定性 Tool Calling；后续可插拔外部生成式模型。
+- 确定性 Tool Calling 与可选的 OpenAI-compatible 模型 Tool Calling。
+- 模型超时、协议错误或证据不足时显式回退到确定性路径。
 - Prompt 编排。
 - 结构化 JSON 诊断报告。
 - Python AI 服务调用状态和延迟统计。
@@ -179,6 +194,8 @@ getRecentDeployments(serviceName)
 generateIncidentReport(incidentId)
 ```
 
+模型运行时只暴露前五个只读取证工具，`generateIncidentReport` 是诊断完成后的受信后处理步骤。每个工具都执行参数类型、`incidentId`、`serviceName` 和 `traceId` 归属校验。
+
 工具调用必须经过后端 Tool Gateway，Python 服务不能直接操作业务数据库或基础设施。
 
 每次工具调用都应该记录：
@@ -205,16 +222,18 @@ Redis 不能只是为了堆技术名词，而要承担真实后端价值：
 - 对重复故障分析进行去重。
 - 可选使用 Redis Stream 传递和恢复异步诊断事件。
 
-## Chroma 的使用方式
+## 混合 RAG 的使用方式
 
-Chroma 用于存储：
+Chroma 用于存储 Dense embedding，BM25 索引用于补足错误码、服务名和缩写等精确词匹配；两个候选集通过 RRF 融合，避免直接比较不同量纲的分数。
+
+知识库包含：
 
 - 运维手册。
 - 历史故障案例。
 - 服务依赖说明。
 - 故障排查指南。
 
-每个被检索出的文本片段都应包含来源元数据，这样最终诊断报告可以引用证据来源。
+当前知识库包含 9 份 Runbook、45 个切片。每个检索结果都带来源、Dense/BM25 排名和融合分数，最终诊断报告可引用可追溯的证据来源。
 
 ## 可观测性设计
 

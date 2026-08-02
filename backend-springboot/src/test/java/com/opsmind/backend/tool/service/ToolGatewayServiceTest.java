@@ -16,6 +16,9 @@ import com.opsmind.backend.diagnosis.model.DiagnosisTaskStatus;
 import com.opsmind.backend.diagnosis.service.DiagnosisTaskEventPublisher;
 import com.opsmind.backend.diagnosis.service.DiagnosisTaskService;
 import com.opsmind.backend.diagnosis.service.DiagnosisService;
+import com.opsmind.backend.incident.model.Incident;
+import com.opsmind.backend.incident.service.IncidentService;
+import com.opsmind.backend.observability.model.LogEntry;
 import com.opsmind.backend.observability.model.MetricPoint;
 import com.opsmind.backend.observability.model.DeploymentRecord;
 import com.opsmind.backend.observability.model.TraceSpan;
@@ -32,6 +35,7 @@ class ToolGatewayServiceTest {
 
     private DiagnosisTaskService diagnosisTaskService;
     private DiagnosisService diagnosisService;
+    private IncidentService incidentService;
     private ObservabilityService observabilityService;
     private ToolCallAuditService toolCallAuditService;
     private DiagnosisTaskEventPublisher eventPublisher;
@@ -41,12 +45,14 @@ class ToolGatewayServiceTest {
     void setUp() {
         diagnosisTaskService = mock(DiagnosisTaskService.class);
         diagnosisService = mock(DiagnosisService.class);
+        incidentService = mock(IncidentService.class);
         observabilityService = mock(ObservabilityService.class);
         toolCallAuditService = mock(ToolCallAuditService.class);
         eventPublisher = mock(DiagnosisTaskEventPublisher.class);
         toolGatewayService = new ToolGatewayService(
                 diagnosisTaskService,
                 diagnosisService,
+                incidentService,
                 observabilityService,
                 toolCallAuditService,
                 eventPublisher,
@@ -57,6 +63,10 @@ class ToolGatewayServiceTest {
 
         when(diagnosisTaskService.getTask("task-1"))
                 .thenReturn(task("task-1", "incident-1"));
+        Incident incident = mock(Incident.class);
+        when(incident.getId()).thenReturn("incident-1");
+        when(incident.getServiceName()).thenReturn("payment-service");
+        when(incidentService.getById("incident-1")).thenReturn(incident);
     }
 
     @Test
@@ -101,6 +111,15 @@ class ToolGatewayServiceTest {
                 "timeout"
         ));
         when(observabilityService.queryTrace("trace-1")).thenReturn(spans);
+        when(observabilityService.queryLogs("payment-service")).thenReturn(List.of(
+                new LogEntry(
+                        Instant.parse("2026-07-05T10:00:00Z"),
+                        "payment-service",
+                        "ERROR",
+                        "trace-1",
+                        "timeout"
+                )
+        ));
 
         ToolExecutionResponse response = toolGatewayService.execute(
                 request("queryTrace", Map.of("traceId", "trace-1"))
@@ -109,6 +128,28 @@ class ToolGatewayServiceTest {
         assertThat(response.status()).isEqualTo(ToolExecutionStatus.SUCCESS);
         assertThat(response.data()).isEqualTo(spans);
         verify(observabilityService).queryTrace("trace-1");
+    }
+
+    @Test
+    void crossServiceQueryBecomesStructuredFailure() {
+        ToolExecutionResponse response = toolGatewayService.execute(
+                request("queryLogs", Map.of("serviceName", "admin-service"))
+        );
+
+        assertThat(response.status()).isEqualTo(ToolExecutionStatus.FAILED);
+        assertThat(response.errorMessage()).contains("不属于当前故障");
+    }
+
+    @Test
+    void crossIncidentTraceBecomesStructuredFailure() {
+        when(observabilityService.queryLogs("payment-service")).thenReturn(List.of());
+
+        ToolExecutionResponse response = toolGatewayService.execute(
+                request("queryTrace", Map.of("traceId", "unrelated-trace"))
+        );
+
+        assertThat(response.status()).isEqualTo(ToolExecutionStatus.FAILED);
+        assertThat(response.errorMessage()).contains("traceId");
     }
 
     @Test

@@ -3,9 +3,13 @@
 from typing import Any
 
 from app.rag.chroma_store import ChromaRunbookStore
+from app.rag.hybrid_search import HybridRunbookSearcher
 
 
 def search_runbooks(query: str, n_results: int = 3) -> list[dict[str, Any]]:
-    """从持久化知识库中返回与查询最相关的 Runbook 文档片段。"""
+    """使用 dense、BM25 和 RRF 返回可解释的 Runbook 检索结果。"""
     store = ChromaRunbookStore()
-    return store.search(query=query, n_results=n_results)
+    return HybridRunbookSearcher(store).search(
+        query=query,
+        n_results=n_results,
+    )

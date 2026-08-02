@@ -37,6 +37,28 @@
         "refId": "A"
       }],
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Agent Token 速率",
+      "datasource": { "type": "prometheus", "uid": "opsmind-prometheus" },
+      "targets": [{
+        "expr": "sum by (mode, direction) (rate(opsmind_agent_tokens_total[5m]))",
+        "legendFormat": "{{mode}} / {{direction}}",
+        "refId": "A"
+      }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Agent 执行模式",
+      "datasource": { "type": "prometheus", "uid": "opsmind-prometheus" },
+      "targets": [{
+        "expr": "sum by (mode) (rate(opsmind_agent_executions_total[5m]))",
+        "legendFormat": "{{mode}}",
+        "refId": "A"
+      }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
     }
   ],
   "refresh": "10s",

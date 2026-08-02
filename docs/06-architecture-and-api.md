@@ -1,7 +1,10 @@
 # 调用链与 API 说明
 
-这份文档解释 OpsMind AI 的真实方法调用顺序、各个 Service 的职责和常用 API
-调用方式。阅读代码时可以先看这里，再进入具体类。
+更新时间：2026-08-02。
+
+这份文档解释 OpsMind AI 的真实调用顺序、模块职责、跨语言合同和常用 API。
+LLM/RAG 内部策略与评测细节见
+[LLM Agent、RAG 与评测](07-llm-agent-and-evaluation.md)。
 
 ## 一次完整诊断
 
@@ -13,165 +16,207 @@ sequenceDiagram
     participant EX as DiagnosisTaskExecutor
     participant DS as DiagnosisService
     participant AC as AiDiagnosisClient
-    participant PY as FastAPI
+    participant PY as FastAPI AgentOrchestrator
+    participant ML as Optional LLM
     participant TG as ToolGatewayService
-    participant OS as ObservabilityService
+    participant OBS as Observability/Runbook
     participant DB as MySQL
 
     UI->>TC: POST /diagnosis-tasks/incidents/{incidentId}
     TC->>TS: createTask(incidentId, clientKey)
-    TS->>DB: 保存 PENDING 任务
+    TS->>DB: 保存 PENDING
     TS->>EX: execute(taskId)
     TS-->>UI: 立即返回 taskId
     UI->>TC: GET /{taskId}/events
-    TC->>TS: subscribeEvents(taskId)
     EX->>DB: 保存 RUNNING
-    EX->>DS: diagnoseAndSaveRecord(taskId, incidentId, traceId)
+    EX->>DS: diagnoseAndSaveRecord(...)
     DS->>AC: diagnose(DiagnosisRequest)
     AC->>PY: POST /ai/diagnose
-    loop 日志、指标、Trace、发布、Runbook
-        PY->>TG: POST /api/tools/execute
-        TG->>OS: 执行白名单查询
-        TG->>DB: 保存工具审计
-        TG-->>PY: 结构化 ToolExecutionResponse
+    opt llm 模式
+        PY->>ML: /chat/completions + tools
+        ML-->>PY: tool_calls 或最终 JSON
     end
-    PY-->>AC: DiagnosisReport
+    loop 五类只读取证工具
+        PY->>TG: POST /api/tools/execute
+        TG->>OBS: 执行白名单查询
+        TG->>DB: 保存工具审计
+        TG-->>PY: ToolExecutionResult
+    end
+    PY-->>AC: DiagnosisReport + AgentMetadata
+    AC->>DB: 保存 AI 调用审计
     DS->>DB: 保存 DiagnosisRecord
     EX->>DB: 保存 SUCCESS 和 reportId
     EX-->>UI: SSE SUCCESS
 ```
 
-重要顺序：
+可靠状态顺序：
 
 ```text
-数据库状态先保存 -> Redis 快照更新 -> SSE 再推送
+MySQL 状态先保存 -> Redis 快照更新 -> SSE 再推送
 ```
 
-数据库是可靠事实，SSE 只是实时通知。即使浏览器断线，页面刷新后仍能从数据库恢复。
+MySQL 是事实来源，Redis 是加速层，SSE 是实时通知。浏览器断线或 Redis 不可用时，
+页面仍能从数据库恢复最近任务、报告和审计。
 
-## Service 分工
+## 模块职责
 
 ### `DiagnosisTaskService`
 
-职责：
-
-- 校验故障是否存在。
-- 查询 Redis 中是否有可复用任务。
-- 执行客户端限流和同故障分布式去重。
+- 校验 Incident。
+- 执行客户端限流和同 Incident 分布式去重。
+- 查询 10 分钟内可复用的成功任务。
 - 创建 `PENDING` 任务并立即返回。
 - 查询任务或建立 SSE 订阅。
 
-它不执行 AI 诊断。真正耗时的工作交给 `DiagnosisTaskExecutor`。
+它不执行 AI，也不持有长时间 HTTP 请求。
 
 ### `DiagnosisTaskExecutor`
 
-职责：
-
-- 在 `@Async` 线程中执行任务。
-- 推进 `RUNNING / SUCCESS / FAILED` 状态。
+- 在 `@Async` 线程中执行诊断。
+- 推进 `RUNNING / SUCCESS / FAILED`。
 - 调用 `DiagnosisService`。
-- 先保存数据库和 Redis，再推送 SSE。
-- 成功保存报告 id，失败保存可读原因。
+- 先保存数据库与缓存，再推送 SSE。
+- 成功保存报告 id，失败保存面向用户的原因。
 
 ### `DiagnosisService`
 
-职责：
-
-- 查询 Incident。
-- 收集初始日志、指标和 Trace 上下文。
-- 组装 Java 与 Python 之间的 `DiagnosisRequest`。
+- 查询 Incident 和初始观测上下文。
+- 组装 Java/Python 之间的 `DiagnosisRequest`。
 - 调用 `AiDiagnosisClient`。
-- 把 Python 返回的结构化报告保存到 MySQL。
+- 保存结构化 `DiagnosisRecord`。
 - 基于已保存报告生成事故复盘。
 
-它不管理异步线程，也不管理 SSE。
+它不管理线程、SSE 或模型供应商配置。
 
 ### `AiDiagnosisClient`
 
-职责：
-
-- 使用 `RestClient` 调用 `POST /ai/diagnose`。
-- 应用连接/读取超时。
+- 使用 `RestClient` 调用 FastAPI `/ai/diagnose`。
+- 应用连接与读取超时。
 - 由 Resilience4j 提供重试、熔断和 Bulkhead。
-- 记录 AI 服务调用指标与审计。
-- 最终失败转换为统一友好错误。
+- 保存成功或失败的 AI 调用审计。
+- 记录执行模式、Token 和模型工具调用指标。
+- 最终失败转换为稳定业务错误，不泄露内部响应。
 
-典型方法链：
+### Python `AgentOrchestrator`
 
-```java
-restClient.post()
-        .uri(aiBaseUrl + "/ai/diagnose")
-        .contentType(MediaType.APPLICATION_JSON)
-        .accept(MediaType.APPLICATION_JSON)
-        .body(request)
-        .retrieve()
-        .body(DiagnosisReport.class);
-```
+- 读取 `OPSMIND_DIAGNOSIS_MODE`。
+- `deterministic` 调用本地稳定诊断器。
+- `llm` 调用受控模型工具循环。
+- 只捕获模型运行时和模型客户端错误进行显式 fallback。
+- fallback 报告标记为 `LLM_FALLBACK`，不伪装成 LLM 成功。
 
-含义：
+### Python `LlmAgentRuntime`
 
-1. `post()`：创建 POST 请求。
-2. `uri()`：指定 Python 接口地址。
-3. `contentType()`：声明发送 JSON。
-4. `accept()`：声明希望接收 JSON。
-5. `body()`：由 Jackson 序列化 Java 请求对象。
-6. `retrieve()`：真正发送请求并处理 HTTP 状态。
-7. `body(Class)`：把返回 JSON 反序列化成 `DiagnosisReport`。
-
-### Python `generate_diagnosis`
-
-职责：
-
-- 依次获取日志、指标、Trace、发布记录和 Runbook。
-- 每个工具失败时使用已有上下文或空结果降级。
-- 只把真实命中的信号写入 evidence。
-- 按三种演示故障生成稳定、可评测的结构化报告。
-
-Python 不直接查询 MySQL，业务工具全部通过 Spring Tool Gateway。
+- 调用 OpenAI-compatible `/chat/completions`。
+- 维护 assistant/tool 消息循环和累计 usage。
+- 收敛模型工具参数到当前 Incident。
+- 要求五类取证覆盖，限制步数、工具数和结果长度。
+- 校验最终 JSON 并写入可信 id 与 Agent 元数据。
 
 ### Python `ToolGatewayClient`
 
-职责：
-
-- 接收 `taskId`、`incidentId`、`toolName` 和 `arguments`。
-- 调用 Spring Boot 的 `POST /api/tools/execute`。
-- 从 Spring 统一 `Result` 中只提取内部 `data` 给诊断工作流。
-- 把超时、连接失败、非 2xx 和响应格式错误统一转换为结构化 `FAILED`。
-
-核心调用：
-
-```python
-with httpx.Client(
-    base_url=backend_base_url,
-    timeout=timeout_seconds,
-    trust_env=False,
-) as client:
-    response = client.post("/api/tools/execute", json=payload)
-```
-
-`base_url` 统一保存后端地址，`timeout` 防止工具调用无限等待；
-`trust_env=False` 表示内部服务直连，不继承 macOS 或服务器上的 HTTP 代理环境，
-避免本机代理错误接管 `localhost` 或 Docker 服务名请求。`json=payload` 会完成
-JSON 序列化并自动设置请求内容类型。
+- 发送 `taskId`、`incidentId`、平台 `traceId`、工具名和参数。
+- 调用 Spring `POST /api/tools/execute`。
+- 从统一 `Result` 中提取内部工具结果。
+- 将超时、连接失败、非 2xx 和合同错误转换为结构化 `FAILED`。
+- 内部服务调用设置 `trust_env=False`，避免本机代理接管 Docker 服务名。
 
 ### `ToolGatewayService`
 
-职责：
+- 校验任务、Incident、工具名和参数。
+- 确认任务与 Incident 归属一致。
+- 校验服务名与 Incident 服务一致。
+- Trace 必须来自当前 Incident 服务的日志证据。
+- 只执行精确白名单。
+- 保存审计、记录指标并推送 SSE 工具阶段。
+- 将普通工具错误转换为结构化失败。
 
-- 校验 `taskId`、`incidentId`、`toolName` 和 `arguments`。
-- 确认任务和故障属于同一次诊断。
-- 只执行精确白名单中的工具。
-- 将异常转换成结构化 `FAILED`，不让 Python 因普通工具失败崩溃。
-- 保存工具审计、记录指标并推送 SSE 工具阶段。
+### RAG 模块
 
-### `ToolCallAuditService`
+- `ChromaRunbookStore`：向量、文档和元数据读写。
+- `BM25Index`：中英文稀疏评分。
+- `HybridRunbookSearcher`：Dense 候选、BM25 排名和 RRF 融合。
+- `search_runbooks`：HTTP 与诊断流程共用的兼容入口。
 
-职责：
+## 跨语言合同
 
-- 审计成功时只保存短摘要。
-- 审计失败时保存错误原因。
-- 审计失败只写后端预警，不反向改变工具结果。
-- 对外查询使用 DTO 隐藏 `requestPayload`。
+### `DiagnosisRequest`
+
+Spring 发送的关键字段：
+
+```json
+{
+  "taskId": "task-uuid",
+  "traceId": "platform-trace-id",
+  "incident": {
+    "id": "incident-uuid",
+    "title": "支付服务超时导致订单结算失败",
+    "serviceName": "payment-service",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "symptom": "支付接口响应超过 3 秒",
+    "createdAt": "2026-08-02T08:00:00Z",
+    "updatedAt": "2026-08-02T08:00:00Z"
+  },
+  "logs": [],
+  "metrics": [],
+  "traces": []
+}
+```
+
+`taskId` 对旧同步合同保持可空，但 LLM Tool Calling 必须有异步任务 id。
+
+### `DiagnosisReport`
+
+```json
+{
+  "incidentId": "incident-uuid",
+  "traceId": "platform-trace-id",
+  "summary": "检测到支付下游调用持续超时。",
+  "rootCause": "支付通道响应超时。",
+  "evidence": ["日志出现 ReadTimeout", "Runbook: payment-timeout.md"],
+  "recommendation": "检查下游健康并启用有边界的熔断降级。",
+  "confidence": 0.86,
+  "agentMetadata": {
+    "executionMode": "DETERMINISTIC",
+    "provider": "opsmind",
+    "modelName": "deterministic-rag-agent",
+    "promptVersion": "deterministic-v1",
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "toolCallCount": 0
+  }
+}
+```
+
+`incidentId` 和平台 `traceId` 在 LLM 模式下由运行时覆盖模型内容。历史数据库记录的
+新元数据列允许为空，响应映射会提供确定性默认值，避免已有 Volume 启动失败。
+
+### `ToolExecutionResult`
+
+```json
+{
+  "toolName": "queryLogs",
+  "status": "SUCCESS",
+  "data": [],
+  "errorMessage": null,
+  "latencyMs": 2
+}
+```
+
+工具级 `FAILED` 可以出现在 HTTP 200 的统一业务响应中，调用方必须检查
+`data.status`，不能只看 HTTP 状态。
+
+## 工具目录
+
+| 工具 | 模型可调用 | 关键参数边界 | 作用 |
+| --- | --- | --- | --- |
+| `queryLogs` | 是 | 服务名强制绑定 Incident | 查询结构化日志 |
+| `queryMetrics` | 是 | 服务名强制绑定 Incident | 查询指标 |
+| `queryTrace` | 是 | Trace 必须来自当前证据 | 查询链路 Span |
+| `searchRunbook` | 是 | query <= 500，nResults 1..5 | 混合检索 Runbook |
+| `getRecentDeployments` | 是 | 服务名强制绑定 Incident | 查询最近发布 |
+| `generateIncidentReport` | 否 | 用户在诊断后显式触发 | 生成事故复盘 |
 
 ## 核心 API
 
@@ -182,7 +227,7 @@ curl -X POST \
   http://127.0.0.1:8080/api/fault-scenarios/redis-connection-failure/inject
 ```
 
-返回中的 `data.incident.id` 是后续创建诊断任务使用的 `incidentId`。
+返回中的 `data.incident.id` 是后续 `incidentId`。
 
 ### 2. 创建异步任务
 
@@ -191,17 +236,13 @@ curl -X POST \
   http://127.0.0.1:8080/api/diagnosis-tasks/incidents/{incidentId}
 ```
 
-该接口不会等待 AI。返回 `data.id` 后，前端可以建立 SSE。
+接口立即返回 `data.id`，不会等待模型或向量检索。
 
-### 3. 查询任务
+### 3. 查询与恢复任务
 
 ```bash
 curl http://127.0.0.1:8080/api/diagnosis-tasks/{taskId}
-```
 
-恢复某个故障最近任务：
-
-```bash
 curl \
   "http://127.0.0.1:8080/api/diagnosis-tasks?incidentId={incidentId}"
 ```
@@ -214,7 +255,7 @@ curl -N \
   http://127.0.0.1:8080/api/diagnosis-tasks/{taskId}/events
 ```
 
-事件包含：
+阶段事件：
 
 ```text
 PENDING
@@ -227,7 +268,8 @@ SUCCESS
 FAILED
 ```
 
-`SUCCESS` 携带 `diagnosisRecordId`，`FAILED` 携带 `failureReason`。
+订阅建立时先发送当前快照。`SUCCESS` 携带 `diagnosisRecordId`，`FAILED` 携带
+`failureReason`，终态发送后关闭连接。
 
 ### 5. 调用 Tool Gateway
 
@@ -238,14 +280,12 @@ curl -X POST \
     "taskId": "{taskId}",
     "incidentId": "{incidentId}",
     "toolName": "queryLogs",
-    "arguments": {
-      "serviceName": "cache-service"
-    }
+    "arguments": {"serviceName": "cache-service"}
   }' \
   http://127.0.0.1:8080/api/tools/execute
 ```
 
-Tool Gateway 即使拒绝未知工具，也会返回结构化结果：
+未知或越权工具返回结构化失败，并留下审计：
 
 ```json
 {
@@ -257,22 +297,17 @@ Tool Gateway 即使拒绝未知工具，也会返回结构化结果：
 }
 ```
 
-### 6. 查询审计和报告
+### 6. 查询审计与报告
 
 ```bash
-curl \
-  "http://127.0.0.1:8080/api/tool-call-audits?taskId={taskId}"
-
-curl \
-  "http://127.0.0.1:8080/api/ai-call-audits?taskId={taskId}"
-
-curl \
-  "http://127.0.0.1:8080/api/diagnoses/incidents/{incidentId}/records"
+curl "http://127.0.0.1:8080/api/tool-call-audits?taskId={taskId}"
+curl "http://127.0.0.1:8080/api/ai-call-audits?taskId={taskId}"
+curl "http://127.0.0.1:8080/api/diagnoses/incidents/{incidentId}/records"
 ```
 
-### 7. 生成事故复盘
+AI 审计中的 `agentToolCallCount` 只统计模型循环，详细工具调用以第一条接口为准。
 
-复盘也是一个白名单工具，因此会留下审计：
+### 7. 生成事故复盘
 
 ```bash
 curl -X POST \
@@ -281,12 +316,24 @@ curl -X POST \
     "taskId": "{taskId}",
     "incidentId": "{incidentId}",
     "toolName": "generateIncidentReport",
-    "arguments": {
-      "incidentId": "{incidentId}"
-    }
+    "arguments": {"incidentId": "{incidentId}"}
   }' \
   http://127.0.0.1:8080/api/tools/execute
 ```
+
+### 8. FastAPI 健康与 RAG
+
+```bash
+curl http://127.0.0.1:8000/ai/health
+
+curl --get \
+  --data-urlencode "query=OOMKilled 后内存基线持续上涨" \
+  --data "n_results=3" \
+  http://127.0.0.1:8000/ai/runbooks/search
+```
+
+健康响应包括 `diagnosisMode`、`llmConfigured` 和当前模型名，但不会触发 embedding
+模型加载。
 
 ## Redis 键
 
@@ -297,25 +344,40 @@ opsmind:diagnosis:lock:{incidentId}
 opsmind:diagnosis:rate:{clientKey}
 ```
 
-- task：任务状态缓存。
-- reuse：短期复用任务 id。
-- lock：封住并发创建窗口。
-- rate：固定窗口请求计数。
+| 键 | 作用 |
+| --- | --- |
+| `task` | 任务状态快照 |
+| `reuse` | 短期成功任务复用 |
+| `lock` | 封住并发创建窗口 |
+| `rate` | 固定窗口客户端计数 |
 
-Redis 异常时，任务查询回源 MySQL，限流和锁采用 fail-open，保证主业务可继续。
+Redis 异常时任务查询回源 MySQL；限流和锁 fail-open，避免缓存成为主业务单点。
 
-## 常见响应状态
+## 失败与降级语义
+
+| 失败位置 | 行为 |
+| --- | --- |
+| 单个确定性工具失败 | 使用已有请求上下文或空结果继续，审计为 FAILED |
+| LLM 未知工具/越权/非法 JSON | 抛出 AgentRuntimeError |
+| LLM 网络、HTTP 或响应合同错误 | 抛出 LlmClientError |
+| LLM 错误且 fallback 开启 | 返回 `LLM_FALLBACK` 报告 |
+| LLM 错误且 fallback 关闭 | Python 请求失败，由 Spring 稳定性边界处理 |
+| Redis 缓存失败 | 回源或 fail-open，并记录警告 |
+| AI 服务最终不可用 | 任务进入 FAILED，保存友好 failureReason |
+
+只有预期的模型运行时/客户端错误触发 LLM fallback；未预期编程异常不会被宽泛捕获并
+静默伪装成成功。
+
+## HTTP 状态
 
 | HTTP 状态 | 场景 |
 | --- | --- |
-| 200 | 请求成功；工具内部成功或失败看 `data.status` |
-| 400 | 参数错误、资源不存在、任务归属不一致 |
-| 409 | 同故障任务正处于极短的并发创建窗口 |
+| 200 | 请求成功；工具内部结果仍需检查 `data.status` |
+| 400 | 参数错误、资源不存在、任务归属或工具范围不一致 |
+| 409 | 同 Incident 任务处于极短并发创建窗口 |
 | 429 | 客户端超过每分钟诊断创建上限 |
-| 500 | 未预期系统异常，内部细节不会暴露给前端 |
+| 500 | 未预期系统异常；内部细节不暴露给前端 |
 
-完整接口 Schema 可在 Swagger UI 查看：
+完整 Spring Schema：`http://127.0.0.1:8080/swagger-ui/index.html`。
 
-```text
-http://127.0.0.1:8080/swagger-ui/index.html
-```
+完整 Python Schema：`http://127.0.0.1:8000/docs`。

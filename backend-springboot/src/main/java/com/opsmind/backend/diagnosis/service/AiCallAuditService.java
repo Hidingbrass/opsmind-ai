@@ -3,6 +3,8 @@ package com.opsmind.backend.diagnosis.service;
 import java.util.List;
 
 import com.opsmind.backend.diagnosis.dto.AiCallAuditResponse;
+import com.opsmind.backend.diagnosis.dto.AgentExecutionMetadata;
+import com.opsmind.backend.diagnosis.dto.DiagnosisReport;
 import com.opsmind.backend.diagnosis.dto.DiagnosisRequest;
 import com.opsmind.backend.diagnosis.model.AiCallAudit;
 import com.opsmind.backend.diagnosis.model.AiCallStatus;
@@ -17,11 +19,6 @@ public class AiCallAuditService {
 
     /** 审计旁路保存失败时只记录后端预警。 */
     private static final Logger log = LoggerFactory.getLogger(AiCallAuditService.class);
-    /** 当前审计记录的是 Spring 调用本项目 Python 服务，而非外部模型供应商。 */
-    private static final String PROVIDER = "opsmind-python-agent";
-    /** 默认诊断器采用可重复评测的确定性多工具工作流。 */
-    private static final String MODEL_NAME = "deterministic-rag-agent";
-
     /** AI 调用审计的 MySQL 持久化入口。 */
     private final AiCallAuditRepository repository;
 
@@ -33,17 +30,39 @@ public class AiCallAuditService {
     /** 尽力保存一次 Spring 到 Python 调用，审计失败只告警而不改变诊断结果。 */
     public void record(
             DiagnosisRequest request,
+            DiagnosisReport report,
             boolean successful,
             long latencyMs,
             Throwable error
     ) {
         try {
+            AgentExecutionMetadata metadata;
+            if (report == null) {
+                metadata = new AgentExecutionMetadata(
+                        "UNKNOWN",
+                        "opsmind-python-agent",
+                        "unknown",
+                        "unknown",
+                        0,
+                        0,
+                        0
+                );
+            } else if (report.agentMetadata() == null) {
+                metadata = AgentExecutionMetadata.deterministic();
+            } else {
+                metadata = report.agentMetadata();
+            }
             repository.save(new AiCallAudit(
                     request.taskId(),
                     request.incident().id(),
                     request.traceId(),
-                    PROVIDER,
-                    MODEL_NAME,
+                    metadata.provider(),
+                    metadata.modelName(),
+                    metadata.executionMode(),
+                    metadata.promptVersion(),
+                    metadata.inputTokens(),
+                    metadata.outputTokens(),
+                    metadata.toolCallCount(),
                     successful ? AiCallStatus.SUCCESS : AiCallStatus.FAILED,
                     latencyMs,
                     error == null ? null : safeMessage(error)

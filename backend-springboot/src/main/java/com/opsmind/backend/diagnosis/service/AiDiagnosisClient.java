@@ -67,12 +67,25 @@ public class AiDiagnosisClient {
             }
             Duration duration = elapsed(startedAt);
             opsMindMetrics.aiCall(true, duration);
-            aiCallAuditService.record(request, true, duration.toMillis(), null);
+            opsMindMetrics.agentExecution(report.agentMetadata());
+            aiCallAuditService.record(
+                    request,
+                    report,
+                    true,
+                    duration.toMillis(),
+                    null
+            );
             return report;
         } catch (RuntimeException exception) {
             Duration duration = elapsed(startedAt);
             opsMindMetrics.aiCall(false, duration);
-            aiCallAuditService.record(request, false, duration.toMillis(), exception);
+            aiCallAuditService.record(
+                    request,
+                    null,
+                    false,
+                    duration.toMillis(),
+                    exception
+            );
             throw exception;
         }
     }

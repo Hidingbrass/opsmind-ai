@@ -67,6 +67,9 @@ nav { display: grid; gap: 4px; margin-top: 18px; }
 .status-failed, .status-high { background: #f7e1df; color: #a73939; }
 .status-running, .status-medium { background: #fff0cf; color: #8b6518; }
 .status-pending { background: #e6ecf7; color: #48658e; }
+.status-llm { background: #e4edf8; color: #315f91; }
+.status-llm_fallback { background: #fff0cf; color: #8b6518; }
+.status-deterministic { background: #edf0f2; color: #52636b; }
 .status-idle, .status-unknown { background: #edf0f2; color: #6f7c83; }
 
 .detail-panel { min-height: 620px; overflow: hidden; }
@@ -118,6 +121,7 @@ nav { display: grid; gap: 4px; margin-top: 18px; }
 .report-lead span, .report-lead strong { display: block; }
 .report-lead span { font-size: 9px; text-transform: uppercase; }
 .report-lead strong { margin-top: 4px; color: #24343b; font-size: 12px; line-height: 1.5; }
+.report-runtime { display: block; margin-top: 5px; color: #64777e; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
 .report-section { padding: 4px 2px; }
 .report-section h4 { margin: 0 0 6px; font-size: 11px; }
 .report-section p, .report-section li { color: #56666e; font-size: 10px; line-height: 1.65; }

@@ -41,6 +41,23 @@ public class AiCallAudit {
     @Column(nullable = false, length = 100)
     private String modelName;
 
+    /** 确定性、外部模型或模型失败后降级。 */
+    @Column(length = 30)
+    private String executionMode;
+
+    /** 生成报告时使用的 Prompt 合同版本。 */
+    @Column(length = 80)
+    private String promptVersion;
+
+    /** 外部模型输入 Token。 */
+    private Long inputTokens;
+
+    /** 外部模型输出 Token。 */
+    private Long outputTokens;
+
+    /** 模型循环中的工具调用次数。 */
+    private Integer agentToolCallCount;
+
     /** 本次调用成功或失败。 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -69,6 +86,11 @@ public class AiCallAudit {
             String traceId,
             String provider,
             String modelName,
+            String executionMode,
+            String promptVersion,
+            long inputTokens,
+            long outputTokens,
+            int agentToolCallCount,
             AiCallStatus status,
             long latencyMs,
             String errorMessage
@@ -78,6 +100,11 @@ public class AiCallAudit {
         this.traceId = traceId;
         this.provider = provider;
         this.modelName = modelName;
+        this.executionMode = executionMode;
+        this.promptVersion = promptVersion;
+        this.inputTokens = inputTokens;
+        this.outputTokens = outputTokens;
+        this.agentToolCallCount = agentToolCallCount;
         this.status = status;
         this.latencyMs = latencyMs;
         this.errorMessage = errorMessage;
@@ -118,6 +145,31 @@ public class AiCallAudit {
     /** @return 当前诊断工作流或未来外部模型名称 */
     public String getModelName() {
         return modelName;
+    }
+
+    /** @return DETERMINISTIC、LLM 或 LLM_FALLBACK */
+    public String getExecutionMode() {
+        return executionMode == null ? "DETERMINISTIC" : executionMode;
+    }
+
+    /** @return Prompt 合同版本 */
+    public String getPromptVersion() {
+        return promptVersion == null ? "deterministic-v1" : promptVersion;
+    }
+
+    /** @return 外部模型输入 Token */
+    public long getInputTokens() {
+        return inputTokens == null ? 0 : inputTokens;
+    }
+
+    /** @return 外部模型输出 Token */
+    public long getOutputTokens() {
+        return outputTokens == null ? 0 : outputTokens;
+    }
+
+    /** @return 模型循环中的工具调用次数 */
+    public int getAgentToolCallCount() {
+        return agentToolCallCount == null ? 0 : agentToolCallCount;
     }
 
     /** @return 本次调用成功或失败 */

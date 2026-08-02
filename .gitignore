@@ -10,3 +10,10 @@ ai-agent-service/.chroma/
 **/.pytest_cache/
 frontend-dashboard/node_modules/
 frontend-dashboard/dist/
+.playwright-cli/
+
+# 本地模型凭证不得进入仓库；示例文件只保留变量名。
+.env
+**/.env
+!.env.example
+!**/.env.example

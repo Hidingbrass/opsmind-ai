@@ -3,6 +3,8 @@ package com.opsmind.backend.diagnosis.model;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.opsmind.backend.diagnosis.dto.AgentExecutionMetadata;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -51,6 +53,31 @@ public class DiagnosisRecord {
     @Column(nullable = false)
     private double confidence;
 
+    /** 报告由确定性流程、外部模型还是降级路径生成。 */
+    @Column(length = 30)
+    private String executionMode;
+
+    /** 外部模型提供方或本地诊断器标识。 */
+    @Column(length = 80)
+    private String provider;
+
+    /** 实际使用的模型名。 */
+    @Column(length = 120)
+    private String modelName;
+
+    /** 可复现实验和审计使用的 Prompt 版本。 */
+    @Column(length = 80)
+    private String promptVersion;
+
+    /** 外部模型输入 Token；确定性模式为 0。 */
+    private Long inputTokens;
+
+    /** 外部模型输出 Token；确定性模式为 0。 */
+    private Long outputTokens;
+
+    /** 模型循环中的工具调用次数；确定性模式为 0。 */
+    private Integer agentToolCallCount;
+
     /** 报告入库时间。 */
     @Column(nullable = false)
     private Instant createdAt;
@@ -67,7 +94,8 @@ public class DiagnosisRecord {
             String rootCause,
             String evidenceJson,
             String recommendation,
-            double confidence
+            double confidence,
+            AgentExecutionMetadata agentMetadata
     ) {
         this.incidentId = incidentId;
         this.traceId = traceId;
@@ -76,6 +104,16 @@ public class DiagnosisRecord {
         this.evidenceJson = evidenceJson;
         this.recommendation = recommendation;
         this.confidence = confidence;
+        AgentExecutionMetadata metadata = agentMetadata == null
+                ? AgentExecutionMetadata.deterministic()
+                : agentMetadata;
+        this.executionMode = metadata.executionMode();
+        this.provider = metadata.provider();
+        this.modelName = metadata.modelName();
+        this.promptVersion = metadata.promptVersion();
+        this.inputTokens = metadata.inputTokens();
+        this.outputTokens = metadata.outputTokens();
+        this.agentToolCallCount = metadata.toolCallCount();
     }
 
     /** 首次入库前生成报告 id 和创建时间。 */
@@ -123,6 +161,19 @@ public class DiagnosisRecord {
     /** @return 诊断置信度 */
     public double getConfidence() {
         return confidence;
+    }
+
+    /** @return 报告的 Agent 执行元数据 */
+    public AgentExecutionMetadata getAgentMetadata() {
+        return new AgentExecutionMetadata(
+                executionMode == null ? "DETERMINISTIC" : executionMode,
+                provider == null ? "opsmind" : provider,
+                modelName == null ? "deterministic-rag-agent" : modelName,
+                promptVersion == null ? "deterministic-v1" : promptVersion,
+                inputTokens == null ? 0 : inputTokens,
+                outputTokens == null ? 0 : outputTokens,
+                agentToolCallCount == null ? 0 : agentToolCallCount
+        );
     }
 
     /** @return 报告入库时间 */

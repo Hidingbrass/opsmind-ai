@@ -104,25 +104,88 @@ class ChromaRunbookStore:
 
     def search(self, query: str, n_results: int = 3) -> list[dict[str, Any]]:
         """返回最相近的 Runbook 片段、来源元数据和向量距离。"""
+        if not isinstance(query, str) or not query.strip():
+            return []
+        try:
+            requested = int(n_results)
+        except (TypeError, ValueError):
+            return []
+        if requested <= 0:
+            return []
+
+        document_count = self.collection.count()
+        if document_count <= 0:
+            return []
+
         result = self.collection.query(
             query_embeddings=build_embeddings([query]),
-            n_results=n_results,
+            n_results=min(requested, document_count),
+            include=["documents", "metadatas", "distances"],
         )
 
         # Chroma 按“批次查询 -> 命中列表”返回二维数组，这里只取单个 query 的第一组。
-        documents = result.get("documents", [[]])[0]
-        metadatas = result.get("metadatas", [[]])[0]
-        distances = result.get("distances", [[]])[0]
+        ids = self._first_query_batch(result, "ids")
+        documents = self._first_query_batch(result, "documents")
+        metadatas = self._first_query_batch(result, "metadatas")
+        distances = self._first_query_batch(result, "distances")
 
         # 把 Chroma 的并行数组整理成 API 更容易使用的命中对象。
         hits = []
-        for index, document in enumerate(documents):
+        row_count = max(
+            len(ids),
+            len(documents),
+            len(metadatas),
+            len(distances),
+            0,
+        )
+        for index in range(row_count):
+            document = documents[index] if index < len(documents) else ""
             hits.append(
                 {
-                    "content": document,
-                    "metadata": metadatas[index],
+                    "id": ids[index] if index < len(ids) else None,
+                    "content": document if isinstance(document, str) else "",
+                    "metadata": (
+                        metadatas[index]
+                        if index < len(metadatas)
+                        and isinstance(metadatas[index], dict)
+                        else {}
+                    ),
                     "distance": distances[index] if index < len(distances) else None,
                 }
             )
 
         return hits
+
+    def list_documents(self) -> list[dict[str, Any]]:
+        """Return the indexed corpus without loading or running the embedding model."""
+        result = self.collection.get(include=["documents", "metadatas"])
+        ids = self._flat_list(result.get("ids"))
+        documents = self._flat_list(result.get("documents"))
+        metadatas = self._flat_list(result.get("metadatas"))
+        row_count = max(len(ids), len(documents), len(metadatas), 0)
+
+        hits: list[dict[str, Any]] = []
+        for index in range(row_count):
+            document = documents[index] if index < len(documents) else ""
+            metadata = metadatas[index] if index < len(metadatas) else {}
+            hits.append(
+                {
+                    "id": ids[index] if index < len(ids) else None,
+                    "content": document if isinstance(document, str) else "",
+                    "metadata": metadata if isinstance(metadata, dict) else {},
+                    "distance": None,
+                }
+            )
+        return hits
+
+    @staticmethod
+    def _first_query_batch(result: dict[str, Any], key: str) -> list[Any]:
+        value = result.get(key)
+        if not isinstance(value, list) or not value:
+            return []
+        first_batch = value[0]
+        return first_batch if isinstance(first_batch, list) else []
+
+    @staticmethod
+    def _flat_list(value: Any) -> list[Any]:
+        return value if isinstance(value, list) else []

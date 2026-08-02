@@ -1,17 +1,17 @@
 FROM maven:3.9.11-eclipse-temurin-21 AS build
+ARG MAVEN_MIRROR_URL=https://repo.maven.apache.org/maven2
+ENV MAVEN_MIRROR_URL=${MAVEN_MIRROR_URL}
+ENV MAVEN_OPTS="-Djava.net.preferIPv4Stack=true"
 WORKDIR /workspace
+COPY maven-settings.xml /root/.m2/settings.xml
 COPY pom.xml .
-# Maven Central 偶发超时时保留已下载依赖，并允许 Wagon 自动重试。
-RUN --mount=type=cache,target=/root/.m2/repository \
-    mvn -q \
-        -Dmaven.wagon.http.retryHandler.count=5 \
-        -DskipTests \
-        dependency:go-offline
 COPY src src
-RUN --mount=type=cache,target=/root/.m2/repository \
-    mvn -q \
+# JAR 保存在镜像层中；仓库缓存只负责加速源码变更后的重新构建。
+RUN --mount=type=cache,target=/root/.m2/repository,sharing=locked \
+    mvn --settings /root/.m2/settings.xml \
+        --batch-mode --no-transfer-progress \
         -Dmaven.wagon.http.retryHandler.count=5 \
-        -DskipTests \
+        -Dmaven.test.skip=true \
         package
 
 FROM eclipse-temurin:21-jre

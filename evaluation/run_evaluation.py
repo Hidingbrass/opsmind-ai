@@ -109,6 +109,7 @@ def evaluate_case(
     )
     report = records[0]
     evidence_text = " ".join(report["evidence"])
+    agent_metadata = report.get("agentMetadata") or {}
 
     scores = {
         "rootCause": contains_all(
@@ -150,6 +151,11 @@ def evaluate_case(
         "diagnosisRecordId": task["diagnosisRecordId"],
         "latencyMs": round((time.monotonic() - started_at) * 1000),
         "confidence": report["confidence"],
+        "executionMode": agent_metadata.get("executionMode", "UNKNOWN"),
+        "modelName": agent_metadata.get("modelName", "unknown"),
+        "inputTokens": agent_metadata.get("inputTokens", 0),
+        "outputTokens": agent_metadata.get("outputTokens", 0),
+        "agentToolCallCount": agent_metadata.get("toolCallCount", 0),
         "toolCalls": [audit["toolName"] for audit in reversed(audits)],
     }
 
@@ -177,19 +183,22 @@ def write_reports(results: list[dict[str, Any]], output_dir: Path) -> None:
         f"- 通过：{passed}/{len(results)}",
         f"- 通过率：{summary['passRate']:.0%}",
         "",
-        "| 场景 | 结果 | 根因 | 证据 | 建议 | 工具覆盖 | 复盘 | 置信度 | 延迟 |",
-        "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: |",
+        "| 场景 | 结果 | 模式 | 模型 | 根因 | 证据 | 建议 | 工具覆盖 | 复盘 | Token | 置信度 | 延迟 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: |",
     ]
     for result in results:
         status = "PASS" if result["passed"] else "FAIL"
         scores = result.get("scores", {})
         lines.append(
             f"| {result['scenarioKey']} | {status} | "
+            f"{result.get('executionMode', 'UNKNOWN')} | "
+            f"{result.get('modelName', 'unknown')} | "
             f"{score_mark(scores.get('rootCause'))} | "
             f"{score_mark(scores.get('evidence'))} | "
             f"{score_mark(scores.get('recommendation'))} | "
             f"{score_mark(scores.get('toolCoverage'))} | "
             f"{score_mark(scores.get('incidentReport'))} | "
+            f"{result.get('inputTokens', 0) + result.get('outputTokens', 0)} | "
             f"{result.get('confidence', 0):.2f} | "
             f"{result['latencyMs']}ms |"
         )
@@ -203,7 +212,7 @@ def write_reports(results: list[dict[str, Any]], output_dir: Path) -> None:
         lines.append(f"- `{result['scenarioKey']}`：{calls}")
     lines.extend([
         "",
-        "> 首个场景延迟包含中文向量模型冷启动；后续场景复用进程内模型缓存。",
+        "> 若 AI 服务刚启动，首个场景延迟还会包含中文向量模型冷启动；后续请求复用进程内模型缓存。",
     ])
     (output_dir / "report.md").write_text(
         "\n".join(lines) + "\n",

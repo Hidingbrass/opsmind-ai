@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 
-from app.diagnosis import generate_diagnosis
+from app.agent.config import load_agent_settings
+from app.agent.orchestrator import diagnose_with_config
 from app.rag.runbook_search import search_runbooks
 from app.schemas import DiagnosisRequest, DiagnosisReport
 
@@ -12,16 +13,20 @@ from app.schemas import DiagnosisRequest, DiagnosisReport
 app = FastAPI(
     title="OpsMind AI Agent Service",
     description="OpsMind AI 的 Python AI Agent 服务",
-    version="0.1.0",
+    version="1.1.0",
 )
 
 
 @app.get("/ai/health")
 def health():
     """返回轻量存活状态；健康检查不会触发体积较大的向量模型加载。"""
+    settings = load_agent_settings()
     return {
         "service": "opsmind-ai-agent",
         "status": "UP",
+        "diagnosisMode": settings.mode,
+        "llmConfigured": settings.llm_ready,
+        "model": settings.model or "deterministic-rag-agent",
         "time": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -29,7 +34,7 @@ def health():
 @app.post("/ai/diagnose", response_model=DiagnosisReport)
 def diagnose(request: DiagnosisRequest):
     """校验 Java 请求合同，并把请求交给多工具诊断流程。"""
-    return generate_diagnosis(request)
+    return diagnose_with_config(request)
 
 
 @app.get("/ai/runbooks/search")

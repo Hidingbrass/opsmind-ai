@@ -195,6 +195,7 @@ public class DiagnosisService {
                 fromJsonToStringList(record.getEvidenceJson()),
                 record.getRecommendation(),
                 record.getConfidence(),
+                record.getAgentMetadata(),
                 record.getCreatedAt()
         );
     }
@@ -208,7 +209,8 @@ public class DiagnosisService {
                 record.getRootCause(),
                 fromJsonToStringList(record.getEvidenceJson()),
                 record.getRecommendation(),
-                record.getConfidence()
+                record.getConfidence(),
+                record.getAgentMetadata()
         );
     }
 
@@ -234,7 +236,8 @@ public class DiagnosisService {
                 diagnosisReport.rootCause(),
                 evidenceJson,
                 diagnosisReport.recommendation(),
-                diagnosisReport.confidence()
+                diagnosisReport.confidence(),
+                diagnosisReport.agentMetadata()
         );
         return diagnosisRecordRepository.save(diagnosisRecord);
     }

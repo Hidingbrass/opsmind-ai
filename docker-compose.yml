@@ -58,6 +58,15 @@ services:
       OPSMIND_BACKEND_BASE_URL: http://backend:8080
       CHROMA_HOST: chroma
       CHROMA_PORT: 8000
+      OPSMIND_DIAGNOSIS_MODE: ${OPSMIND_DIAGNOSIS_MODE:-deterministic}
+      OPSMIND_LLM_PROVIDER: ${OPSMIND_LLM_PROVIDER:-openai-compatible}
+      OPSMIND_LLM_BASE_URL: ${OPSMIND_LLM_BASE_URL:-}
+      OPSMIND_LLM_API_KEY: ${OPSMIND_LLM_API_KEY:-}
+      OPSMIND_LLM_MODEL: ${OPSMIND_LLM_MODEL:-}
+      OPSMIND_LLM_PROMPT_VERSION: ${OPSMIND_LLM_PROMPT_VERSION:-opsmind-agent-v1}
+      OPSMIND_LLM_MAX_STEPS: ${OPSMIND_LLM_MAX_STEPS:-6}
+      OPSMIND_LLM_TIMEOUT_SECONDS: ${OPSMIND_LLM_TIMEOUT_SECONDS:-45}
+      OPSMIND_LLM_FALLBACK_ENABLED: ${OPSMIND_LLM_FALLBACK_ENABLED:-true}
     ports:
       - "8000:8000"
     volumes:
@@ -75,6 +84,8 @@ services:
   backend:
     build:
       context: ./backend-springboot
+      args:
+        MAVEN_MIRROR_URL: ${MAVEN_MIRROR_URL:-https://repo.maven.apache.org/maven2}
     container_name: opsmind-backend
     environment:
       OPSMIND_DB_URL: jdbc:mysql://mysql:3306/opsmind?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai

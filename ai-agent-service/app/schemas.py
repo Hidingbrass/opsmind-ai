@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IncidentPayload(BaseModel):
@@ -86,6 +86,20 @@ class ToolExecutionResult(BaseModel):
     latencyMs: int  # Spring Tool Gateway 记录的执行耗时。
 
 
+class AgentExecutionMetadata(BaseModel):
+    """描述报告由哪一种诊断器生成，避免把确定性流程包装成外部模型。"""
+
+    executionMode: Literal["DETERMINISTIC", "LLM", "LLM_FALLBACK"] = (
+        "DETERMINISTIC"
+    )
+    provider: str = "opsmind"
+    modelName: str = "deterministic-rag-agent"
+    promptVersion: str = "deterministic-v1"
+    inputTokens: int = Field(default=0, ge=0)
+    outputTokens: int = Field(default=0, ge=0)
+    toolCallCount: int = Field(default=0, ge=0)
+
+
 class DiagnosisReport(BaseModel):
     """返回给 Java 并保存为 DiagnosisRecord 的结构化诊断报告。"""
 
@@ -95,4 +109,7 @@ class DiagnosisReport(BaseModel):
     rootCause: str  # 根因判断。
     evidence: list[str]  # 支撑结论的证据和 Runbook 来源。
     recommendation: str  # 排查或修复建议。
-    confidence: float  # 0 到 1 之间的置信度。
+    confidence: float = Field(ge=0, le=1)  # 0 到 1 之间的置信度。
+    agentMetadata: AgentExecutionMetadata = Field(
+        default_factory=AgentExecutionMetadata
+    )

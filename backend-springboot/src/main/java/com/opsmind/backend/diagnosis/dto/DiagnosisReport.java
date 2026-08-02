@@ -12,6 +12,7 @@ import java.util.List;
  * @param evidence 支撑结论的日志、指标、Trace 和 Runbook 证据
  * @param recommendation 建议排查或修复动作
  * @param confidence 0 到 1 之间的置信度
+ * @param agentMetadata 实际诊断模式、模型、Prompt 和 Token 元数据
  */
 public record DiagnosisReport(
         String incidentId,
@@ -20,6 +21,7 @@ public record DiagnosisReport(
         String rootCause,
         List<String> evidence,
         String recommendation,
-        double confidence
+        double confidence,
+        AgentExecutionMetadata agentMetadata
 ) {
 }

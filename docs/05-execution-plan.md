@@ -34,12 +34,12 @@ MVP 版本：先做完整闭环，约 2-3 周。
 
 ## 当前进度快照
 
-更新时间：2026-07-25。
+更新时间：2026-08-02。
 
 已经完成：
 
 - 支付超时、Redis 连接失败、数据库慢查询三场景及完整证据数据。
-- 三份 Runbook、中文 embedding、Chroma 检索和知识库来源引用。
+- 9 份 Runbook、45 个切片、中文 embedding、BM25 和 RRF 混合检索。
 - 异步任务、SSE 过程与终态、诊断报告落库和页面刷新恢复。
 - `queryLogs`、`queryMetrics`、`queryTrace`、`searchRunbook`、
   `getRecentDeployments`、`generateIncidentReport` 六个白名单工具。
@@ -49,10 +49,15 @@ MVP 版本：先做完整闭环，约 2-3 周。
 - Prometheus 业务指标、Grafana Dashboard、W3C Trace Context 和 OTLP 配置。
 - React 控制台、事故复盘、桌面与移动端布局验收。
 - 三场景真实 HTTP 自动评测，当前结果 `3/3 PASS`。
+- 24 条 RAG 排名评测，Hit@1、Hit@3 和 MRR 均为 `1.00`。
+- Python `24` 项、Java `16` 项测试和 React 生产构建全部通过。
+- GitHub Actions 与本地 `scripts/verify.sh` 统一执行 Compose、Java、Python 和前端校验。
 - 后端、AI、前端 Dockerfile，Nginx 和完整 Docker Compose。
 - Docker Compose 10 个服务完整启动并通过对外入口检查。
 - 新诊断任务的 `traceId` 已在 Tempo 查询到完整跨服务 Span。
-- README、路线图和简历材料已按真实实现边界完成校准。
+- 确定性与 OpenAI-compatible LLM 双执行模式、显式 fallback 和执行元数据审计。
+- LLM 工具循环已通过 mock 测试；由于未配置真实供应商 API Key，尚未声称完成真实模型验收。
+- README、架构、评测、复盘和简历材料已按真实实现边界完成校准。
 
 ## 架构升级方向
 
@@ -71,11 +76,11 @@ MVP 版本：先做完整闭环，约 2-3 周。
        -> MySQL 持久化故障、诊断报告、工具调用记录
        -> Resilience4j 保护 AI 服务和下游工具调用
   -> Python AI Agent 服务
-       -> 多步骤诊断工作流
-       -> Runbook RAG 检索
-       -> Function Calling / Tool Calling
+       -> 确定性 / LLM 双模式诊断工作流
+       -> Dense + BM25 + RRF 混合 Runbook RAG
+       -> 受控 Function Calling / Tool Calling
        -> 结构化 JSON 诊断报告
-       -> Python AI 服务调用状态和延迟统计
+       -> 执行模式、模型、Token、工具数和延迟统计
   -> Chroma 运维知识库
   -> Prometheus / Grafana / OpenTelemetry 可观测性增强
 ```
@@ -91,12 +96,12 @@ MVP 版本：先做完整闭环，约 2-3 周。
 
 AI 主线：
 
-- 多步骤诊断 Agent 工作流。
+- 确定性默认路径与可选 LLM Tool Calling 路径。
 - 日志、指标、链路、Runbook、发布记录工具调用。
 - 结构化诊断报告 JSON Schema。
-- Runbook RAG 引用证据。
-- AI 诊断质量评测集。
-- Python AI 服务调用状态和延迟统计。
+- Dense + BM25 + RRF Runbook RAG 引用证据。
+- RAG 排名、Agent 单元和端到端 HTTP 三层评测。
+- Python AI 服务执行模式、模型调用和延迟统计。
 
 ## MVP 版本：完成可演示闭环
 
@@ -255,20 +260,22 @@ GET  /api/incidents/{incidentId}/diagnosis
 - 运维手册文档格式。
 - 文档切分。
 - 向量化并写入 Chroma。
-- 根据故障现象检索相关 Runbook。
+- 结合 Dense 语义与 BM25 精确词检索相关 Runbook。
+- 使用 RRF 融合两路候选排名。
 - 诊断报告引用知识来源。
 
 核心能力：
 
 ```text
-ingest runbook -> split chunks -> embed -> store in Chroma
-incident context -> search runbook -> cited evidence -> diagnosis report
+ingest runbook -> split chunks -> embed in Chroma + build BM25 index
+incident context -> Dense/BM25 search -> RRF -> cited evidence -> diagnosis report
 ```
 
 验收方式：
 
 - 支付超时故障可以检索到 `payment-timeout` 运维手册。
 - 最终报告中包含 Runbook 标题或片段来源。
+- 24 条固定查询达到 Hit@1 >= 0.80、Hit@3 = 1.00、MRR >= 0.85。
 
 学习重点：
 
@@ -392,7 +399,7 @@ GET /api/diagnosis-tasks/{taskId}/events
 
 预计时间：4-6 天。
 
-当前状态：六个白名单工具、成功/失败审计、审计查询接口和 Python 主动调用均已完成，并通过三场景真实异步评测。
+当前状态：六个后端白名单工具、成功/失败审计、审计查询接口和 Python 调用均已完成，并通过三场景真实异步评测。模型运行时只暴露五个只读取证工具，报告生成由受信后处理代码触发。
 
 目标：让 Python 诊断工作流经过受控 Tool Gateway 获取日志、指标、链路、
 Runbook 和发布记录，并记录每次工具调用。
@@ -437,8 +444,7 @@ createdAt
 - 每一次工具调用都能在数据库和前端时间线中看到。
 - 工具失败时，Agent 能继续使用已有证据生成谨慎结论。
 
-当前默认采用确定性工具调用顺序，保证无外部 API Key 时也能稳定演示和评测；
-不把它描述成“外部大模型自主 Function Calling”。
+当前默认采用确定性工具调用顺序，保证无外部 API Key 时也能稳定演示和评测；可选 `llm` 模式支持 OpenAI-compatible 模型自主选择只读工具。真实供应商 API Key 尚未验收，因此只表述为“已实现并通过 mock 测试”，不表述为“已完成真实模型上线”。
 
 学习重点：
 
@@ -583,6 +589,12 @@ Spring Boot -> Observability Tool
 - 评测维度：根因命中、证据引用、修复建议可执行性、是否幻觉。
 - 输出评测报告。
 
+当前状态：
+
+- RAG 排名评测：24 条固定查询，Hit@1、Hit@3、MRR 均为 `1.00`。
+- Agent 回归：覆盖正常工具循环、未知工具、跨服务 trace、Prompt Injection 和 fallback。
+- 端到端诊断：3 个故障场景真实 HTTP 调用，结果 `3/3 PASS`。
+
 评测集示例：
 
 ```text
@@ -696,8 +708,7 @@ Resilience4j 超时和熔断
 
 ```text
 Redis Stream 诊断事件流
-外部生成式模型与调用成本统计
-GitHub Actions 构建检查
+真实供应商 LLM 验收与成本基线
 Testcontainers 集成测试
 ```
 
@@ -715,8 +726,8 @@ Testcontainers 集成测试
 
 ```text
 必须做：故障注入、观测数据、AI 诊断、Runbook RAG、异步任务、SSE、Redis 限流缓存、工具调用审计。
-已完成加分项：Resilience4j、Prometheus、Grafana、OpenTelemetry、AI 评测集。
-后续扩展：Redis Stream、外部模型成本统计、CI 和集成测试。
+已完成加分项：Resilience4j、Prometheus、Grafana、OpenTelemetry、三层 AI 评测和 GitHub Actions。
+后续扩展：Redis Stream、真实供应商模型验收、成本基线和 Testcontainers 集成测试。
 ```
 
 阶段验收时优先问：
@@ -786,7 +797,7 @@ needHumanConfirmation
 
 ```text
 Spring Boot：业务状态、任务编排、工具网关、审计、限流、熔断、接口边界。
-Python AI Service：多工具取证、RAG、结构化报告和评测；外部模型为后续扩展。
+Python AI Service：双模式多工具取证、混合 RAG、结构化报告和评测；真实模型供应商验收为后续工作。
 ```
 
 验收标准：
@@ -900,5 +911,5 @@ SSE 展示
 接入真实日志、指标和 Trace 数据源
 增加身份认证、租户隔离和工具权限策略
 把进程内异步执行升级为可恢复的消息队列
-在现有证据合同外接生成式模型，并建立回归评测
+使用真实供应商 API Key 验收 LLM 模式并建立成本、稳定性基线
 ```

@@ -3,6 +3,7 @@ package com.opsmind.backend.observability.service;
 import java.time.Duration;
 import java.util.Set;
 
+import com.opsmind.backend.diagnosis.dto.AgentExecutionMetadata;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +24,13 @@ public class OpsMindMetrics {
             "searchRunbook",
             "getRecentDeployments",
             "generateIncidentReport"
+    );
+
+    /** 执行模式也是固定低基数标签，模型名和 Prompt 版本只进入审计表。 */
+    private static final Set<String> KNOWN_EXECUTION_MODES = Set.of(
+            "DETERMINISTIC",
+            "LLM",
+            "LLM_FALLBACK"
     );
 
     /** Micrometer 指标注册中心，Prometheus 会从这里抓取所有 Meter。 */
@@ -67,5 +75,28 @@ public class OpsMindMetrics {
         String status = successful ? "success" : "failed";
         meterRegistry.counter("opsmind.ai.calls", "status", status).increment();
         meterRegistry.timer("opsmind.ai.call.duration", "status", status).record(duration);
+    }
+
+    /** 记录模型 Token 和 Agent 工具次数，不把可变模型名写入 Prometheus 标签。 */
+    public void agentExecution(AgentExecutionMetadata metadata) {
+        if (metadata == null) {
+            return;
+        }
+        String mode = KNOWN_EXECUTION_MODES.contains(metadata.executionMode())
+                ? metadata.executionMode().toLowerCase()
+                : "unknown";
+        meterRegistry.counter("opsmind.agent.executions", "mode", mode).increment();
+        meterRegistry.counter(
+                "opsmind.agent.tokens",
+                "mode", mode,
+                "direction", "input"
+        ).increment(Math.max(metadata.inputTokens(), 0));
+        meterRegistry.counter(
+                "opsmind.agent.tokens",
+                "mode", mode,
+                "direction", "output"
+        ).increment(Math.max(metadata.outputTokens(), 0));
+        meterRegistry.counter("opsmind.agent.tool.calls", "mode", mode)
+                .increment(Math.max(metadata.toolCallCount(), 0));
     }
 }

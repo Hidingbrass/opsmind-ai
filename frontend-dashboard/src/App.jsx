@@ -57,6 +57,12 @@ function StatusBadge({ status }) {
   return <span className={`status status-${normalized.toLowerCase()}`}>{normalized}</span>;
 }
 
+/** 只有外部模型模式才展示 Token；确定性模式的 0 不是模型用量。 */
+function formatAgentUsage(metadata) {
+  if (!metadata || metadata.executionMode !== "LLM") return "无外部模型 Token";
+  return `${metadata.inputTokens + metadata.outputTokens} tokens · ${metadata.toolCallCount} tools`;
+}
+
 /** 为 SSE 时间线中的不同阶段选择语义图标。 */
 function StageIcon({ stage }) {
   if (stage === "SUCCESS" || stage === "TOOL_SUCCESS") return <CheckCircle2 size={16} />;
@@ -442,8 +448,14 @@ function App() {
                       {aiAudits.map((audit) => (
                         <div className="audit-row" key={audit.id}>
                           <div className="tool-icon ai-icon"><Zap size={16} /></div>
-                          <div><strong>Python AI Agent</strong><span>{audit.modelName}</span></div>
-                          <div className="audit-meta"><StatusBadge status={audit.status} /><small>{audit.latencyMs}ms</small></div>
+                          <div>
+                            <strong>{audit.executionMode || "DETERMINISTIC"} Agent</strong>
+                            <span title={audit.promptVersion}>{audit.modelName}</span>
+                          </div>
+                          <div className="audit-meta">
+                            <StatusBadge status={audit.status} />
+                            <small>{audit.inputTokens + audit.outputTokens} tokens · {audit.latencyMs}ms</small>
+                          </div>
                         </div>
                       ))}
                       {!audits.length && !aiAudits.length && <div className="empty-state compact-empty">暂无调用记录</div>}
@@ -455,6 +467,9 @@ function App() {
                   <div className="subheading">
                     <h3>诊断报告</h3>
                     <div className="report-actions">
+                      {latestRecord?.agentMetadata && (
+                        <StatusBadge status={latestRecord.agentMetadata.executionMode} />
+                      )}
                       {latestRecord && <span>置信度 {Math.round(latestRecord.confidence * 100)}%</span>}
                       {latestRecord && task?.status === "SUCCESS" && (
                         <button
@@ -470,7 +485,18 @@ function App() {
                   </div>
                   {latestRecord ? (
                     <div className="report-content">
-                      <div className="report-lead"><Activity size={20} /><div><span>诊断摘要</span><strong>{latestRecord.summary}</strong></div></div>
+                      <div className="report-lead">
+                        <Activity size={20} />
+                        <div>
+                          <span>诊断摘要</span>
+                          <strong>{latestRecord.summary}</strong>
+                          {latestRecord.agentMetadata && (
+                            <small className="report-runtime">
+                              {latestRecord.agentMetadata.modelName} · {latestRecord.agentMetadata.promptVersion} · {formatAgentUsage(latestRecord.agentMetadata)}
+                            </small>
+                          )}
+                        </div>
+                      </div>
                       <div className="report-section"><h4>根因判断</h4><p>{latestRecord.rootCause}</p></div>
                       <div className="report-section"><h4>证据</h4><ul>{latestRecord.evidence.map((item) => <li key={item}>{item}</li>)}</ul></div>
                       <div className="report-section recommendation"><h4>处置建议</h4><p>{latestRecord.recommendation}</p></div>

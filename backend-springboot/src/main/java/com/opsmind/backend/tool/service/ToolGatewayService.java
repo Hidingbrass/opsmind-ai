@@ -7,6 +7,8 @@ import com.opsmind.backend.diagnosis.dto.DiagnosisTaskResponse;
 import com.opsmind.backend.diagnosis.service.DiagnosisTaskEventPublisher;
 import com.opsmind.backend.diagnosis.service.DiagnosisTaskService;
 import com.opsmind.backend.diagnosis.service.DiagnosisService;
+import com.opsmind.backend.incident.model.Incident;
+import com.opsmind.backend.incident.service.IncidentService;
 import com.opsmind.backend.observability.service.ObservabilityService;
 import com.opsmind.backend.observability.service.OpsMindMetrics;
 import com.opsmind.backend.tool.dto.ToolExecutionRequest;
@@ -24,6 +26,8 @@ public class ToolGatewayService {
     private final DiagnosisTaskService diagnosisTaskService;
     /** 生成已完成故障的事故复盘报告。 */
     private final DiagnosisService diagnosisService;
+    /** 查询 Incident 真实服务归属，防止模型跨服务读取观测数据。 */
+    private final IncidentService incidentService;
     /** 实际提供 queryLogs 等只读观测能力。 */
     private final ObservabilityService observabilityService;
     /** 在工具响应确定后，尽力保存成功或失败审计。 */
@@ -41,6 +45,7 @@ public class ToolGatewayService {
     public ToolGatewayService(
             DiagnosisTaskService diagnosisTaskService,
             DiagnosisService diagnosisService,
+            IncidentService incidentService,
             ObservabilityService observabilityService,
             ToolCallAuditService toolCallAuditService,
             DiagnosisTaskEventPublisher diagnosisTaskEventPublisher,
@@ -50,6 +55,7 @@ public class ToolGatewayService {
     ) {
         this.diagnosisTaskService = diagnosisTaskService;
         this.diagnosisService = diagnosisService;
+        this.incidentService = incidentService;
         this.observabilityService = observabilityService;
         this.toolCallAuditService = toolCallAuditService;
         this.diagnosisTaskEventPublisher = diagnosisTaskEventPublisher;
@@ -87,6 +93,7 @@ public class ToolGatewayService {
             if (!task.incidentId().equals(request.incidentId())) {
                 throw new IllegalArgumentException("taskId 与 incidentId 不属于同一次诊断");
             }
+            Incident incident = incidentService.getById(request.incidentId());
 
             diagnosisTaskEventPublisher.publish(
                     request.taskId(),
@@ -99,7 +106,7 @@ public class ToolGatewayService {
             Object data = executeTool(
                     request.toolName(),
                     request.arguments(),
-                    request.incidentId()
+                    incident
             );
 
             response = ToolExecutionResponse.success(
@@ -133,42 +140,53 @@ public class ToolGatewayService {
     private Object executeTool(
             String toolName,
             Map<String, Object> arguments,
-            String requestIncidentId
+            Incident incident
     ) {
         // 只分发明确列入白名单的工具，不根据 AI 输入反射调用任意 Java 方法。
         return switch (toolName) {
-            case "queryLogs" -> executeQueryLogs(arguments);
-            case "queryMetrics" -> executeQueryMetrics(arguments);
-            case "queryTrace" -> executeQueryTrace(arguments);
+            case "queryLogs" -> executeQueryLogs(arguments, incident);
+            case "queryMetrics" -> executeQueryMetrics(arguments, incident);
+            case "queryTrace" -> executeQueryTrace(arguments, incident);
             case "searchRunbook" -> executeSearchRunbook(arguments);
-            case "getRecentDeployments" -> executeGetRecentDeployments(arguments);
+            case "getRecentDeployments" ->
+                    executeGetRecentDeployments(arguments, incident);
             case "generateIncidentReport" ->
-                    executeGenerateIncidentReport(arguments, requestIncidentId);
+                    executeGenerateIncidentReport(arguments, incident.getId());
             default -> throw new IllegalArgumentException("不支持的工具: " + toolName);
         };
     }
 
     /** 校验 queryLogs 专属 serviceName 参数并委托 ObservabilityService 查询。 */
-    private Object executeQueryLogs(Map<String, Object> arguments) {
-        String serviceName = requireArgumentText(arguments, "serviceName");
+    private Object executeQueryLogs(Map<String, Object> arguments, Incident incident) {
+        String serviceName = requireCurrentService(arguments, incident);
         return observabilityService.queryLogs(serviceName);
     }
 
     /** 校验服务名并查询该服务的延迟、错误率或连接类指标。 */
-    private Object executeQueryMetrics(Map<String, Object> arguments) {
-        String serviceName = requireArgumentText(arguments, "serviceName");
+    private Object executeQueryMetrics(Map<String, Object> arguments, Incident incident) {
+        String serviceName = requireCurrentService(arguments, incident);
         return observabilityService.queryMetrics(serviceName);
     }
 
     /** 校验 traceId 并查询同一条调用链中的全部节点。 */
-    private Object executeQueryTrace(Map<String, Object> arguments) {
+    private Object executeQueryTrace(Map<String, Object> arguments, Incident incident) {
         String traceId = requireArgumentText(arguments, "traceId");
+        boolean belongsToIncident = observabilityService
+                .queryLogs(incident.getServiceName())
+                .stream()
+                .anyMatch(logEntry -> traceId.equals(logEntry.traceId()));
+        if (!belongsToIncident) {
+            throw new IllegalArgumentException("traceId 不属于当前故障服务");
+        }
         return observabilityService.queryTrace(traceId);
     }
 
     /** 查询服务最近发布记录，供 Agent 判断故障是否与变更时间相关。 */
-    private Object executeGetRecentDeployments(Map<String, Object> arguments) {
-        String serviceName = requireArgumentText(arguments, "serviceName");
+    private Object executeGetRecentDeployments(
+            Map<String, Object> arguments,
+            Incident incident
+    ) {
+        String serviceName = requireCurrentService(arguments, incident);
         return observabilityService.getRecentDeployments(serviceName);
     }
 
@@ -195,6 +213,9 @@ public class ToolGatewayService {
     @SuppressWarnings("unchecked")
     private Object executeSearchRunbook(Map<String, Object> arguments) {
         String query = requireArgumentText(arguments, "query");
+        if (query.length() > 500) {
+            throw new IllegalArgumentException("query 长度不能超过 500");
+        }
         int nResults = requirePositiveInt(arguments.get("nResults"), "nResults", 3);
 
         Map<String, Object> response = restClient.get()
@@ -240,6 +261,18 @@ public class ToolGatewayService {
             throw new IllegalArgumentException(fieldName + " 必须是非空字符串");
         }
         return text;
+    }
+
+    /** 只允许模型查询当前 Incident 所属服务，拒绝任意 serviceName。 */
+    private String requireCurrentService(
+            Map<String, Object> arguments,
+            Incident incident
+    ) {
+        String serviceName = requireArgumentText(arguments, "serviceName");
+        if (!incident.getServiceName().equals(serviceName)) {
+            throw new IllegalArgumentException("serviceName 不属于当前故障");
+        }
+        return serviceName;
     }
 
     /** 提取可选正整数参数；未传时使用默认值，并限制单次检索规模。 */
