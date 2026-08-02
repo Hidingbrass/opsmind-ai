@@ -6,9 +6,9 @@ spring:
     name: opsmind-backend
 
   datasource:
-    url: ${OPSMIND_DB_URL:jdbc:mysql://localhost:3307/opsmind?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
-    username: ${OPSMIND_DB_USERNAME:opsmind}
-    password: ${OPSMIND_DB_PASSWORD:opsmind_password}
+    url: jdbc:mysql://localhost:3307/opsmind?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: opsmind
+    password: opsmind_password
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -21,60 +21,11 @@ spring:
 
   data:
     redis:
-      host: ${OPSMIND_REDIS_HOST:localhost}
-      port: ${OPSMIND_REDIS_PORT:6379}
+      host: localhost
+      port: 6379
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,circuitbreakers,circuitbreakerevents,retries,retryevents,bulkheads,bulkheadevents
-  endpoint:
-    health:
-      show-details: always
-  health:
-    circuitbreakers:
-      enabled: true
-  metrics:
-    tags:
-      application: ${spring.application.name}
-  tracing:
-    sampling:
-      probability: 1.0
-    propagation:
-      type: W3C
-  otlp:
-    tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
-      timeout: 5s
-
-logging:
-  pattern:
-    correlation: "[traceId=%X{traceId:-},spanId=%X{spanId:-}] "
-
-opsmind:
-  ai:
-    base-url: ${OPSMIND_AI_BASE_URL:http://localhost:8000}
-  diagnosis:
-    rate-limit-per-minute: ${OPSMIND_DIAGNOSIS_RATE_LIMIT:10}
-
-resilience4j:
-  circuitbreaker:
-    instances:
-      aiService:
-        registerHealthIndicator: true
-        slidingWindowSize: 10
-        minimumNumberOfCalls: 4
-        permittedNumberOfCallsInHalfOpenState: 2
-        waitDurationInOpenState: 20s
-        failureRateThreshold: 50
-  retry:
-    instances:
-      aiService:
-        maxAttempts: 2
-        waitDuration: 500ms
-  bulkhead:
-    instances:
-      aiService:
-        maxConcurrentCalls: 4
-        maxWaitDuration: 0
+        include: health,info

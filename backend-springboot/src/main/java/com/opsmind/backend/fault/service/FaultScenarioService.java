@@ -11,16 +11,11 @@ import com.opsmind.backend.incident.model.IncidentSeverity;
 import com.opsmind.backend.incident.service.IncidentService;
 import org.springframework.stereotype.Service;
 
-/**
- * 管理可演示的固定故障场景，并将场景注入转换为 Incident 模块中的真实故障事件。
- */
 @Service
 public class FaultScenarioService {
 
-    /** 复用 Incident 模块的创建逻辑，避免 Fault 模块跨层操作数据库。 */
     private final IncidentService incidentService;
 
-    /** 当前用于 MVP 演示的内存故障场景集合。 */
     private final List<FaultScenario> scenarios = List.of(
             new FaultScenario(
                     "payment-timeout",
@@ -51,30 +46,20 @@ public class FaultScenarioService {
             )
     );
 
-    /** @param incidentService 故障事件业务服务 */
     public FaultScenarioService(IncidentService incidentService) {
         this.incidentService = incidentService;
     }
 
-    /** @return 所有可注入的预置故障场景 */
     public List<FaultScenario> listScenarios() {
         return scenarios;
     }
 
-    /**
-     * 按场景键查找模板，调用 IncidentService 创建一条可继续诊断的故障。
-     *
-     * @param scenarioKey 预置场景唯一键
-     * @return 场景信息和新故障事件
-     */
     public FaultInjectionResponse inject(String scenarioKey) {
-        // 先确认场景存在，再创建 Incident，避免产生来源不明的故障数据。
         FaultScenario scenario = scenarios.stream()
                 .filter(item -> item.key().equals(scenarioKey))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("故障场景不存在: " + scenarioKey));
 
-        // Fault 模块只负责选场景，持久化规则仍由 IncidentService 统一管理。
         Incident incident = incidentService.create(new CreateIncidentRequest(
                 scenario.title(),
                 scenario.serviceName(),
