@@ -7,6 +7,7 @@ import com.opsmind.backend.incident.dto.CreateIncidentRequest;
 import com.opsmind.backend.incident.dto.IncidentResponse;
 import com.opsmind.backend.incident.model.Incident;
 import com.opsmind.backend.incident.service.IncidentService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,7 +37,7 @@ public class IncidentController {
      * @return 统一响应包装的故障事件
      */
     @PostMapping
-    public Result<IncidentResponse> create(@RequestBody CreateIncidentRequest request) {
+    public Result<IncidentResponse> create(@Valid @RequestBody CreateIncidentRequest request) {
         Incident incident = incidentService.create(request);
         return Result.success(IncidentResponse.from(incident));
     }

@@ -1,0 +1,35 @@
+{
+  "verifiedAt": "2026-08-12T09:20:13.734258+00:00",
+  "taskId": "5683b468-044d-4c04-9dd9-f56a5cb0279e",
+  "traceId": "487917b940822c9cd750a7e074f6d5e6",
+  "prometheus": {
+    "backendTargetHealth": [
+      "up"
+    ],
+    "businessMetricSeries": [
+      {
+        "status": "created",
+        "value": "3"
+      },
+      {
+        "status": "success",
+        "value": "3"
+      }
+    ]
+  },
+  "tempo": {
+    "batchCount": 1,
+    "spanCount": 8
+  },
+  "grafana": {
+    "database": "ok",
+    "version": "12.1.0",
+    "datasourceUids": [
+      "opsmind-prometheus",
+      "opsmind-tempo"
+    ],
+    "dashboardUid": "opsmind-overview",
+    "prometheusSeriesCount": 2,
+    "tempoSpanCount": 8
+  }
+}

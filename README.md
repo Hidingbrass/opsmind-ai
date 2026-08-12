@@ -3,15 +3,17 @@
 面向微服务故障的证据驱动诊断平台。Spring Boot 负责业务状态、异步任务、
 Tool Gateway、审计和稳定性边界；FastAPI 负责诊断编排、混合检索和可选的
 LLM Tool Calling。项目关注的不是聊天界面，而是 AI 能力如何安全地进入一条
-可追踪、可恢复、可评测的后端工程链路。
+可追踪、可对账、可评测的后端工程链路。
 
 ```text
 故障注入 -> 异步任务 -> SSE 进度 -> 多源取证 -> Runbook RAG
          -> 结构化诊断 -> 报告落库 -> 事故复盘
 ```
 
-> 2026-08-02 验收：Docker 全栈三场景 `3/3 PASS`，RAG 评测
-> `Hit@1 = 1.00 / Hit@3 = 1.00 / MRR = 1.00`。
+> 2026-08-12 当前检出验证：Docker 三场景 `3/3 PASS`，RAG 的
+> `Hit@1 / Hit@3 / MRR` 均为 `1.00`；Java `25/25`、Python `28/28`、
+> 前端 `2/2` 测试和生产构建通过。双 SSE、杀进程恢复及 Prometheus/Grafana/Tempo
+> 查询也已完成本地整栈复验。
 
 ## 30 秒了解项目
 
@@ -38,17 +40,21 @@ LLM Tool Calling。项目关注的不是聊天界面，而是 AI 能力如何安
 | --- | --- |
 | 支付超时、Redis 失败、数据库慢查询 | `3/3 PASS`，置信度分别为 0.86 / 0.84 / 0.85 |
 | 混合检索评测 | 9 份 Runbook、24 条查询，Hit@1 / Hit@3 / MRR 均为 1.00 |
-| Java 单元测试 | `16/16 PASS` |
-| Python 单元测试 | `24/24 PASS` |
-| React 生产构建 | PASS |
-| Docker Compose | 10 个服务健康启动，HTTP smoke PASS |
-| 浏览器布局 | 1440x1000 / 390x844 无横向溢出，控制台 0 error |
-| 可观测性 | Prometheus、Grafana、OpenTelemetry、Tempo 已打通 |
+| Java 单元测试 | `25/25 PASS` |
+| Python 单元测试 | `28/28 PASS` |
+| 前端测试与生产构建 | `2/2 PASS`；Vite build PASS |
+| Docker Compose | 2026-08-12 当前镜像下 Spring/FastAPI 健康，HTTP smoke `3/3 PASS` |
+| SSE 与进程恢复 | 两个真实 SSE 订阅者都收到 `SUCCESS`；杀死并重启后端后遗留任务被对账为 `FAILED` |
+| 真实浏览器恢复 | 两个 Chromium 标签页跨后端中断后都恢复到持久化 `FAILED` 终态 |
+| 可观测性 | Prometheus target/业务指标、Tempo Trace、Grafana 数据源/仪表盘及两类代理查询均通过 |
 
 评测证据：
 
 - [三场景诊断报告](evaluation/results/report.md)
 - [RAG 排名结果](evaluation/results/rag_report.json)
+- [双 SSE 与进程恢复结果](evaluation/results/runtime_resilience_2026-08-12.json)
+- [Prometheus/Grafana/Tempo 查询结果](evaluation/results/observability_2026-08-12.json)
+- [2026-08-10 深度工程审计](docs/09-deep-audit-2026-08-10.md)
 
 这些数字是固定演示集上的回归结果，不代表生产环境准确率。项目把数据集、门槛、
 脚本和原始结果一并保留，方便面试时解释“如何测”，而不只展示一个百分比。
@@ -60,11 +66,13 @@ LLM Tool Calling。项目关注的不是聊天界面，而是 AI 能力如何安
 - 三种可重复故障：`payment-timeout`、`redis-connection-failure`、
   `database-slow-query`。
 - 异步状态机：`PENDING / RUNNING / SUCCESS / FAILED`。
-- SSE 推送 AI 调用、工具开始、工具成功/失败和任务终态。
+- SSE 推送 AI 调用、工具开始、工具成功/失败和任务终态，同一任务支持多个订阅者。
 - Tool Gateway 提供六个精确白名单工具：日志、指标、Trace、Runbook、发布记录和复盘。
-- LLM 模式最多执行 6 轮，只有完成五类只读取证后才能提交最终报告。
+- LLM 模式最多执行 6 轮，只有五类只读取证工具均成功后才能提交最终报告。
 - 模型输出必须通过 Pydantic 结构校验；可信的 `incidentId` 和 `traceId` 由运行时覆盖。
 - 外部模型失败可显式降级到确定性流程，不会把降级伪装成 LLM 成功。
+- Python 输入合同和 Java DTO/报告落库边界都限制文本、列表和映射大小，避免超长内容延迟到
+  数据库层才失败。
 
 ### RAG 与评测
 
@@ -82,7 +90,13 @@ LLM Tool Calling。项目关注的不是聊天界面，而是 AI 能力如何安
 - Resilience4j 提供有限重试、熔断和 Bulkhead 并发隔离。
 - Tool Gateway 校验任务与故障归属，并进一步限制服务名、Trace 来源和查询长度。
 - 外部 DTO 隐藏工具原始请求，错误信息在系统边界统一处理。
+- 诊断线程池显式限制为核心 2、最大 4、队列 20；过载时返回 `503`，并把已创建任务收敛为
+  `FAILED`，避免任务永久停留在 `PENDING`。
+- 直连模式只使用 socket 对端地址作为限流 key，不接受客户端伪造的 `X-Forwarded-For`；
+  若生产环境需要代理后的真实用户 IP，仍需实现可信代理 allowlist。
 - AI 审计保存执行模式、供应商、模型、Prompt 版本、Token 和模型工具调用数。
+- 单实例启动会把上次进程遗留的 `PENDING/RUNNING` 任务明确终止为 `FAILED` 并清理复用状态；
+  不自动重放，避免重复报告和审计。
 
 ### 可观测与展示
 
@@ -90,7 +104,8 @@ LLM Tool Calling。项目关注的不是聊天界面，而是 AI 能力如何安
 - 模型名和 Prompt 版本只进入审计，不作为 Prometheus 标签，避免高基数。
 - W3C Trace Context 贯穿入口、异步线程、Python 调用和工具回调。
 - OpenTelemetry Collector 将 Trace 写入 Tempo，Grafana 自动加载指标和链路数据源。
-- React 控制台展示故障注入、SSE 时间线、调用审计、模型元数据、报告和事故复盘。
+- React 控制台展示故障注入、SSE 时间线、调用审计、模型元数据、报告和事故复盘；SSE
+  断开后使用有上限的指数退避重连，并以持久化任务状态作为终态依据。
 
 ## 系统架构
 
@@ -175,6 +190,9 @@ MAVEN_MIRROR_URL=https://maven.aliyun.com/repository/public \
 | Grafana | `http://127.0.0.1:3001` | `admin / opsmind` |
 | Tempo | `http://127.0.0.1:3200` | Trace 查询 API |
 
+后端默认只绑定宿主机回环地址。若 `8080` 已被本机其他服务占用，可在启动和验收命令前设置
+`OPSMIND_BACKEND_PORT=18080`；容器内调用仍使用 `backend:8080`。
+
 健康检查：
 
 ```bash
@@ -241,6 +259,14 @@ cd ..
 
 ai-agent-service/.venv/bin/python evaluation/run_rag_evaluation.py \
   --output evaluation/results/rag_report.json
+
+./scripts/verify_runtime_resilience.py \
+  --base-url http://127.0.0.1:8080 \
+  --output evaluation/results/runtime_resilience.json
+
+./scripts/verify_observability.py \
+  --task-id <成功任务 ID> \
+  --output evaluation/results/observability.json
 ```
 
 RAG 默认门槛为 `Hit@1 >= 0.80`、`Hit@3 >= 1.00`、`MRR >= 0.85`；低于门槛
@@ -251,7 +277,8 @@ RAG 默认门槛为 `Hit@1 >= 0.80`、`Hit@3 >= 1.00`、`MRR >= 0.85`；低于�
 已实现并完成整栈验收：
 
 - 确定性多工具诊断、混合 RAG、任务/SSE、工具网关、审计、稳定性和可观测性。
-- 固定三场景 HTTP 评测、24 条 RAG 回归集、桌面和移动端浏览器验收。
+- 固定三场景 HTTP 评测、24 条 RAG 回归集、双 SSE、进程中断恢复、真实浏览器重连和
+  Prometheus/Grafana/Tempo 查询。
 
 已实现但仍需外部条件验收：
 
@@ -261,9 +288,12 @@ RAG 默认门槛为 `Hit@1 >= 0.80`、`Hit@3 >= 1.00`、`MRR >= 0.85`；低于�
 明确不宣称：
 
 - 模拟日志、指标、Trace 和发布记录不是真实生产数据源。
-- 当前没有多租户、企业级鉴权、人工审批、真实告警接入或生产 SLO。
+- 当前没有多租户、企业级鉴权、可信代理 allowlist、人工审批、真实告警接入或生产 SLO。
+- 默认密码和环境变量传密钥只适合本地演示；尚未接入生产 Secret Manager、密钥轮换和
+  管理端点网络隔离。
 - 24 条 RAG 数据集是回归集，不是行业基准；没有用它证明生产准确率。
 - 当前是单 Agent 运行时，不把开发阶段的主/子 Agent 协作包装成产品能力。
+- 当前异步执行是单实例进程内任务，不具备消息队列式续跑或多实例任务接管能力。
 
 ## 仓库结构
 

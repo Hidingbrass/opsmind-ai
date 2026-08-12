@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +20,7 @@ import com.opsmind.backend.observability.service.OpsMindMetrics;
 import com.opsmind.backend.observability.service.TraceContextService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.task.TaskRejectedException;
 
 class DiagnosisTaskServiceTest {
 
@@ -100,6 +102,29 @@ class DiagnosisTaskServiceTest {
         assertThat(response).isPresent();
         assertThat(response.orElseThrow().id()).isEqualTo("task-latest");
         verify(incidentService).getById("incident-1");
+    }
+
+    @Test
+    void rejectedAsyncSubmissionPersistsFailedTerminalState() {
+        DiagnosisTask savedTask = task(
+                "task-rejected",
+                "incident-1",
+                DiagnosisTaskStatus.PENDING
+        );
+        when(cacheService.getReusableTaskId("incident-1")).thenReturn(Optional.empty());
+        when(cacheService.tryAcquireIncidentLock("incident-1")).thenReturn(true);
+        when(repository.save(org.mockito.ArgumentMatchers.any(DiagnosisTask.class)))
+                .thenReturn(savedTask);
+        when(repository.saveAndFlush(savedTask)).thenReturn(savedTask);
+        doThrow(new TaskRejectedException("queue full"))
+                .when(executor).execute("task-rejected");
+
+        assertThatThrownBy(() -> taskService.createTask("incident-1", "client-1"))
+                .isInstanceOf(TaskRejectedException.class);
+
+        verify(savedTask).markFailed(org.mockito.ArgumentMatchers.contains("容量"));
+        verify(repository).saveAndFlush(savedTask);
+        verify(cacheService).finishTask("incident-1", false);
     }
 
     private DiagnosisTask task(

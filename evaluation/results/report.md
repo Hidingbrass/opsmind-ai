@@ -1,14 +1,14 @@
 # OpsMind AI 诊断评测报告
 
-- 生成时间：2026-08-02T09:06:43.006417+00:00
+- 生成时间：2026-08-12T09:19:18.932784+00:00
 - 通过：3/3
 - 通过率：100%
 
 | 场景 | 结果 | 模式 | 模型 | 根因 | 证据 | 建议 | 工具覆盖 | 复盘 | Token | 置信度 | 延迟 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: |
-| payment-timeout | PASS | DETERMINISTIC | deterministic-rag-agent | PASS | PASS | PASS | PASS | PASS | 0 | 0.86 | 579ms |
-| redis-connection-failure | PASS | DETERMINISTIC | deterministic-rag-agent | PASS | PASS | PASS | PASS | PASS | 0 | 0.84 | 557ms |
-| database-slow-query | PASS | DETERMINISTIC | deterministic-rag-agent | PASS | PASS | PASS | PASS | PASS | 0 | 0.85 | 560ms |
+| payment-timeout | PASS | DETERMINISTIC | deterministic-rag-agent | PASS | PASS | PASS | PASS | PASS | 0 | 0.86 | 608ms |
+| redis-connection-failure | PASS | DETERMINISTIC | deterministic-rag-agent | PASS | PASS | PASS | PASS | PASS | 0 | 0.84 | 549ms |
+| database-slow-query | PASS | DETERMINISTIC | deterministic-rag-agent | PASS | PASS | PASS | PASS | PASS | 0 | 0.85 | 566ms |
 
 ## 工具调用
 

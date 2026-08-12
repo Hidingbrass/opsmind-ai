@@ -289,7 +289,7 @@ incident context -> Dense/BM25 search -> RRF -> cited evidence -> diagnosis repo
 
 ## 增强版本：突出后端工程化和 Agent 过程
 
-目标：让系统从“能调用 AI”升级为“可观测、可恢复、可审计、可保护”的后端平台。
+目标：让系统从“能调用 AI”升级为“可观测、重启可对账、可审计、可保护”的后端平台。
 
 预计时间：
 

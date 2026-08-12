@@ -54,10 +54,11 @@ run_python_tests() {
   )
 }
 
-build_frontend() {
+test_and_build_frontend() {
   (
     cd "${PROJECT_ROOT}/frontend-dashboard"
     npm ci
+    npm test
     npm run build
   )
 }
@@ -77,7 +78,7 @@ main() {
   run_step '[1/4] Docker Compose static validation' validate_compose
   run_step '[2/4] Java Maven tests' run_java_tests
   run_step '[3/4] Python unit tests' run_python_tests
-  run_step '[4/4] React production build' build_frontend
+  run_step '[4/4] React tests and production build' test_and_build_frontend
   printf '\nAll OpsMind verification steps passed.\n'
 }
 

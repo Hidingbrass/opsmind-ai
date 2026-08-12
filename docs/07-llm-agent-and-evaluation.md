@@ -85,7 +85,8 @@ getRecentDeployments(serviceName)
 `generateIncidentReport` 仍是 Spring 后端在诊断完成后的显式命令，不开放给模型。
 这样可以把“取证与判断”和“生成正式复盘”分开，并保留用户操作与审计边界。
 
-完成报告前，运行时要求五类证据工具都被调用。模型最多执行 `maxSteps` 轮，
+完成报告前，运行时要求五类证据工具都返回 `SUCCESS`；失败调用不计入覆盖，模型必须在
+剩余步数内重试。模型最多执行 `maxSteps` 轮，
 工具调用总数最多为 `maxSteps * 3`。超过限制、未完成证据覆盖或没有返回最终 JSON，
 都会产生 `AgentRuntimeError`。
 

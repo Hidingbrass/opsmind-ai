@@ -36,7 +36,7 @@ Java 后端工程能力
 
 | 能力 | 代码证据 | 验收证据 | 正确表述 |
 | --- | --- | --- | --- |
-| 异步诊断与 SSE | Spring task/executor/emitter | 三场景整栈 smoke | 实现可恢复的异步 AI 任务流程 |
+| 异步诊断与 SSE | Spring task/executor/emitter/recovery | 三场景整栈 smoke + 启动对账单测 | 页面可恢复状态，单实例重启可终止并对账遗留任务 |
 | Tool Gateway | 白名单、归属、服务/Trace 校验 | Java 单测 + 工具审计 | 构建受控只读工具执行边界 |
 | 确定性诊断 | Python diagnosis workflow | Docker `3/3 PASS` | 无密钥、可重复的基线诊断器 |
 | 模型 Tool Calling | Agent runtime + compatible client | 模拟模型单测 | 实现可插拔真实模型协议，尚未现场验收供应商 |

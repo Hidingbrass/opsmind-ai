@@ -73,12 +73,13 @@ public class DiagnosisTaskController {
         return diagnosisTaskService.subscribeEvents(taskId);
     }
 
-    /** 优先使用反向代理传递的客户端地址，为 Redis 限流生成稳定键。 */
+    /**
+     * 默认只使用实际 TCP 对端地址，避免调用方伪造转发头绕过 Redis 限流。
+     *
+     * <p>部署到受控网关后如需按终端用户限流，应在网关和应用之间增加明确的可信代理
+     * allowlist，而不是在这里无条件信任 {@code X-Forwarded-For}。
+     */
     private String resolveClientKey(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isBlank()) {
-            return forwardedFor.split(",")[0].trim();
-        }
         return request.getRemoteAddr();
     }
 }

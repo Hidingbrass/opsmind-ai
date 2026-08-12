@@ -2,6 +2,7 @@ package com.opsmind.backend.diagnosis.service;
 
 import java.time.Duration;
 
+import com.opsmind.backend.common.config.AsyncExecutionConfig;
 import com.opsmind.backend.diagnosis.dto.DiagnosisTaskEvent;
 import com.opsmind.backend.diagnosis.dto.DiagnosisTaskResponse;
 import com.opsmind.backend.diagnosis.model.DiagnosisRecord;
@@ -47,7 +48,7 @@ public class DiagnosisTaskExecutor {
      *
      * @param taskId TaskService 刚创建的诊断任务 id
      */
-    @Async
+    @Async(AsyncExecutionConfig.DIAGNOSIS_EXECUTOR)
     public void execute(String taskId) {
         DiagnosisTask task = diagnosisTaskRepository.findById(taskId)
                 .orElseThrow(() -> new IllegalArgumentException("诊断任务不存在: " + taskId));

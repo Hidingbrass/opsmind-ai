@@ -317,7 +317,7 @@ def run_llm_diagnosis(
     allowed_trace_ids = {
         item.traceId for item in request.logs if item.traceId
     } | {item.traceId for item in request.traces if item.traceId}
-    called_tools: set[str] = set()
+    successful_tools: set[str] = set()
     tool_call_count = 0
     input_tokens = 0
     output_tokens = 0
@@ -347,7 +347,8 @@ def run_llm_diagnosis(
                     arguments=safe_arguments,
                 )
                 tool_call_count += 1
-                called_tools.add(tool_call.name)
+                if result.status == "SUCCESS":
+                    successful_tools.add(tool_call.name)
                 _remember_trace_ids(result, allowed_trace_ids)
                 messages.append(
                     {
@@ -359,13 +360,13 @@ def run_llm_diagnosis(
                 )
             continue
 
-        missing_tools = REQUIRED_EVIDENCE_TOOLS - called_tools
+        missing_tools = REQUIRED_EVIDENCE_TOOLS - successful_tools
         if missing_tools:
             messages.append(
                 {
                     "role": "system",
                     "content": (
-                        "最终报告前仍需调用这些证据工具: "
+                        "最终报告前仍需成功调用这些证据工具: "
                         + ", ".join(sorted(missing_tools))
                     ),
                 }

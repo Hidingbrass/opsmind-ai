@@ -1,20 +1,32 @@
 """Java 后端与 Python AI 服务之间的 Pydantic JSON 合同。"""
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+
+Identifier = Annotated[str, Field(min_length=1, max_length=64)]
+DatabaseId = Annotated[str, Field(min_length=1, max_length=36)]
+TraceId = Annotated[str, Field(min_length=1, max_length=64)]
+ServiceName = Annotated[str, Field(min_length=1, max_length=80)]
+ShortText = Annotated[str, Field(min_length=1, max_length=120)]
+SymptomText = Annotated[str, Field(min_length=1, max_length=1000)]
+EvidenceText = Annotated[str, Field(min_length=1, max_length=500)]
+ReportText = Annotated[str, Field(min_length=1, max_length=1000)]
+RecommendationText = Annotated[str, Field(min_length=1, max_length=4000)]
+MessageText = Annotated[str, Field(min_length=1, max_length=4000)]
 
 
 class IncidentPayload(BaseModel):
     """标识 AI 应诊断对象的故障事件上下文。"""
 
-    id: str  # 故障事件唯一 id。
-    title: str  # 故障标题。
-    serviceName: str  # 故障主要所属服务。
-    severity: str  # Java 枚举序列化得到的严重程度。
-    status: str  # Java 枚举序列化得到的事件状态。
-    symptom: str  # 用户或监控观察到的故障现象。
+    id: DatabaseId  # 故障事件唯一 id。
+    title: ShortText  # 故障标题。
+    serviceName: ServiceName  # 故障主要所属服务。
+    severity: Annotated[str, Field(min_length=1, max_length=20)]
+    status: Annotated[str, Field(min_length=1, max_length=20)]
+    symptom: SymptomText  # 用户或监控观察到的故障现象。
     # 使用 datetime 同时兼容 Java 发送的 Unix 时间戳和 ISO-8601 字符串。
     createdAt: datetime  # 创建时间。
     updatedAt: datetime  # 最后更新时间。
@@ -24,56 +36,56 @@ class LogEntryPayload(BaseModel):
     """可观测模块提供的结构化日志证据。"""
 
     timestamp: datetime  # 日志时间。
-    serviceName: str  # 产生日志的服务。
-    level: str  # INFO、WARN 或 ERROR。
-    traceId: str  # 关联分布式链路的 id。
-    message: str  # 日志正文。
+    serviceName: ServiceName  # 产生日志的服务。
+    level: Annotated[str, Field(min_length=1, max_length=20)]
+    traceId: TraceId  # 关联分布式链路的 id。
+    message: MessageText  # 日志正文。
 
 
 class MetricPointPayload(BaseModel):
     """用于量化异常程度的单个监控指标样本。"""
 
     timestamp: datetime  # 采样时间。
-    serviceName: str  # 指标所属服务。
-    metricName: str  # 指标名。
+    serviceName: ServiceName  # 指标所属服务。
+    metricName: Identifier  # 指标名。
     value: float  # 指标数值。
-    unit: str  # ms、percent 或 count 等单位。
+    unit: Annotated[str, Field(min_length=1, max_length=30)]
 
 
 class TraceSpanPayload(BaseModel):
     """分布式请求链路中的单个节点。"""
 
-    traceId: str  # 整条调用链 id。
-    spanId: str  # 当前节点 id。
-    parentSpanId: Optional[str] = None  # 父节点 id，根节点为 None。
-    serviceName: str  # 执行当前节点的服务。
-    operationName: str  # HTTP、SQL 或其他操作名。
-    durationMs: int  # 节点耗时，单位毫秒。
-    status: str  # 节点状态。
-    errorMessage: Optional[str] = None  # 节点失败原因。
+    traceId: TraceId  # 整条调用链 id。
+    spanId: TraceId  # 当前节点 id。
+    parentSpanId: Optional[TraceId] = None  # 父节点 id，根节点为 None。
+    serviceName: ServiceName  # 执行当前节点的服务。
+    operationName: Annotated[str, Field(min_length=1, max_length=160)]
+    durationMs: int = Field(ge=0)  # 节点耗时，单位毫秒。
+    status: Annotated[str, Field(min_length=1, max_length=30)]
+    errorMessage: Optional[MessageText] = None  # 节点失败原因。
 
 
 class DeploymentPayload(BaseModel):
     """发布平台返回的最近部署记录。"""
 
     deployedAt: datetime  # 发布时间。
-    serviceName: str  # 发布服务。
-    version: str  # 应用版本。
-    commitId: str  # 源码提交短 id。
-    operator: str  # 发布人或自动化账号。
-    status: str  # 发布状态。
-    summary: str  # 变更摘要。
+    serviceName: ServiceName  # 发布服务。
+    version: Identifier  # 应用版本。
+    commitId: Identifier  # 源码提交短 id。
+    operator: ShortText  # 发布人或自动化账号。
+    status: Annotated[str, Field(min_length=1, max_length=30)]
+    summary: MessageText  # 变更摘要。
 
 
 class DiagnosisRequest(BaseModel):
     """Spring Boot 为一次诊断发送的完整任务与证据上下文。"""
 
-    taskId: Optional[str] = None  # 异步诊断任务 id；旧同步诊断请求中允许为空。
-    traceId: Optional[str] = None  # Spring 入口创建的 OpenTelemetry traceId。
+    taskId: Optional[DatabaseId] = None
+    traceId: Optional[TraceId] = None
     incident: IncidentPayload  # 待诊断故障。
-    logs: list[LogEntryPayload]  # 与故障服务相关的日志。
-    metrics: list[MetricPointPayload]  # 与故障服务相关的指标。
-    traces: list[TraceSpanPayload]  # 由日志 traceId 延伸得到的链路。
+    logs: list[LogEntryPayload] = Field(max_length=200)
+    metrics: list[MetricPointPayload] = Field(max_length=500)
+    traces: list[TraceSpanPayload] = Field(max_length=500)
 
 
 class ToolExecutionResult(BaseModel):
@@ -103,12 +115,12 @@ class AgentExecutionMetadata(BaseModel):
 class DiagnosisReport(BaseModel):
     """返回给 Java 并保存为 DiagnosisRecord 的结构化诊断报告。"""
 
-    incidentId: str  # 报告所属故障 id。
-    traceId: Optional[str] = None  # 串联任务、工具、AI 调用和报告的链路 id。
-    summary: str  # 面向用户的诊断摘要。
-    rootCause: str  # 根因判断。
-    evidence: list[str]  # 支撑结论的证据和 Runbook 来源。
-    recommendation: str  # 排查或修复建议。
+    incidentId: DatabaseId  # 报告所属故障 id。
+    traceId: Optional[TraceId] = None
+    summary: ReportText  # 面向用户的诊断摘要。
+    rootCause: ReportText  # 根因判断。
+    evidence: list[EvidenceText] = Field(min_length=1, max_length=20)
+    recommendation: RecommendationText  # 排查或修复建议。
     confidence: float = Field(ge=0, le=1)  # 0 到 1 之间的置信度。
     agentMetadata: AgentExecutionMetadata = Field(
         default_factory=AgentExecutionMetadata

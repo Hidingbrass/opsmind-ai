@@ -96,7 +96,7 @@ services:
       OPSMIND_AI_BASE_URL: http://ai-agent:8000
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
     ports:
-      - "8080:8080"
+      - "${OPSMIND_BACKEND_BIND_ADDRESS:-127.0.0.1}:${OPSMIND_BACKEND_PORT:-8080}:8080"
     depends_on:
       mysql:
         condition: service_healthy

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { api } from "./api";
+import { createResilientEventSubscription } from "./sse";
 
 const EVENT_NAMES = [
   "PENDING",
@@ -164,9 +165,6 @@ function App() {
     (taskId, incidentId) => {
       // 切换任务前关闭旧连接，避免两个任务的事件混入同一条时间线。
       sourceRef.current?.close();
-      const source = new EventSource(api.eventUrl(taskId));
-      sourceRef.current = source;
-
       const handleEvent = (event) => {
         const payload = JSON.parse(event.data);
         setEvents((current) => {
@@ -178,21 +176,27 @@ function App() {
         setTask((current) => ({ ...current, ...payload, id: taskId }));
 
         if (payload.status === "SUCCESS" || payload.status === "FAILED") {
-          source.close();
           loadTaskArtifacts(taskId, incidentId).catch((requestError) => {
             setError(requestError.message);
           });
+          return true;
         } else if (payload.stage?.startsWith("TOOL_")) {
           api.listAudits(taskId).then(setAudits).catch(() => {});
         }
+        return false;
       };
 
-      EVENT_NAMES.forEach((name) => source.addEventListener(name, handleEvent));
-      // 网络断开时用普通查询补一次最终状态，SSE 不是唯一可靠来源。
-      source.onerror = () => {
-        source.close();
-        loadTaskArtifacts(taskId, incidentId).catch(() => {});
-      };
+      sourceRef.current = createResilientEventSubscription({
+        url: api.eventUrl(taskId),
+        eventNames: EVENT_NAMES,
+        onEvent: handleEvent,
+        readCurrent: () => api.getDiagnosisTask(taskId),
+        onTerminal: () => {
+          loadTaskArtifacts(taskId, incidentId).catch((requestError) => {
+            setError(requestError.message);
+          });
+        },
+      });
     },
     [loadTaskArtifacts],
   );

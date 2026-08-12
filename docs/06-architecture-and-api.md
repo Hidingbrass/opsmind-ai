@@ -58,6 +58,11 @@ MySQL 状态先保存 -> Redis 快照更新 -> SSE 再推送
 MySQL 是事实来源，Redis 是加速层，SSE 是实时通知。浏览器断线或 Redis 不可用时，
 页面仍能从数据库恢复最近任务、报告和审计。
 
+当前执行器是单实例进程内 `@Async`。服务启动时，`DiagnosisTaskRecoveryService` 会把
+上次进程遗留的 `PENDING/RUNNING` 任务标记为 `FAILED`，刷新缓存并清理复用状态。
+它不会自动重放旧任务，避免重复生成报告和工具审计；需要续跑和多实例接管时应升级为
+带消费确认和幂等键的持久化消息队列。
+
 ## 模块职责
 
 ### `DiagnosisTaskService`
@@ -77,6 +82,13 @@ MySQL 是事实来源，Redis 是加速层，SSE 是实时通知。浏览器断�
 - 调用 `DiagnosisService`。
 - 先保存数据库与缓存，再推送 SSE。
 - 成功保存报告 id，失败保存面向用户的原因。
+
+### `DiagnosisTaskRecoveryService`
+
+- 在单实例应用启动后查询遗留的 `PENDING/RUNNING` 任务。
+- 将无法续跑的旧任务持久化为 `FAILED`。
+- 更新 Redis 快照并移除故障复用索引和锁。
+- 不承担任务重放或多实例协调。
 
 ### `DiagnosisService`
 
@@ -110,7 +122,7 @@ MySQL 是事实来源，Redis 是加速层，SSE 是实时通知。浏览器断�
 - 调用 OpenAI-compatible `/chat/completions`。
 - 维护 assistant/tool 消息循环和累计 usage。
 - 收敛模型工具参数到当前 Incident。
-- 要求五类取证覆盖，限制步数、工具数和结果长度。
+- 要求五类工具均成功取证，失败调用需要重试且不计入覆盖，限制步数、工具数和结果长度。
 - 校验最终 JSON 并写入可信 id 与 Agent 元数据。
 
 ### Python `ToolGatewayClient`

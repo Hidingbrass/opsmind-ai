@@ -99,6 +99,7 @@ public class DiagnosisService {
             String traceId
     ) {
         DiagnosisReport report = requestAiDiagnosis(taskId, incidentId, traceId);
+        DiagnosisReportValidator.validate(report, incidentId);
         return saveDiagnosisRecord(report);
     }
 

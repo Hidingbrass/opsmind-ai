@@ -1,8 +1,9 @@
 """FastAPI 应用入口，将健康检查、RAG 检索和诊断能力暴露为 HTTP API。"""
 
 from datetime import datetime, timezone
+from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 
 from app.agent.config import load_agent_settings
 from app.agent.orchestrator import diagnose_with_config
@@ -38,7 +39,10 @@ def diagnose(request: DiagnosisRequest):
 
 
 @app.get("/ai/runbooks/search")
-def search_runbook_knowledge(query: str, n_results: int = 3):
+def search_runbook_knowledge(
+    query: Annotated[str, Query(min_length=1, max_length=500)],
+    n_results: Annotated[int, Query(ge=1, le=5)] = 3,
+):
     """直接检索 Runbook 文档片段，供 RAG 调试和闭环验收使用。"""
     return {
         "query": query,

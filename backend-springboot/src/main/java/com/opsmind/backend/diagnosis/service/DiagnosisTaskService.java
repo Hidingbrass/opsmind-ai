@@ -12,6 +12,7 @@ import com.opsmind.backend.incident.service.IncidentService;
 import com.opsmind.backend.observability.service.OpsMindMetrics;
 import com.opsmind.backend.observability.service.TraceContextService;
 import org.springframework.stereotype.Service;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
@@ -84,18 +85,26 @@ public class DiagnosisTaskService {
                     ));
         }
 
+        DiagnosisTask savedTask = null;
         try {
             DiagnosisTask diagnosisTask = new DiagnosisTask(
                     incidentId,
                     traceContextService.currentTraceId()
             );
-            DiagnosisTask savedTask = diagnosisTaskRepository.save(diagnosisTask);
+            savedTask = diagnosisTaskRepository.save(diagnosisTask);
             DiagnosisTaskResponse response = DiagnosisTaskResponse.from(savedTask);
             diagnosisTaskCacheService.putTask(response);
             diagnosisTaskCacheService.rememberTask(incidentId, response.id());
             opsMindMetrics.taskCreated();
             diagnosisTaskExecutor.execute(savedTask.getId());
             return response;
+        } catch (TaskRejectedException exception) {
+            if (savedTask != null) {
+                markSubmissionRejected(savedTask);
+            } else {
+                diagnosisTaskCacheService.finishTask(incidentId, false);
+            }
+            throw exception;
         } catch (RuntimeException exception) {
             diagnosisTaskCacheService.finishTask(incidentId, false);
             throw exception;
@@ -105,6 +114,20 @@ public class DiagnosisTaskService {
     /** 兼容内部调用；没有 HTTP 客户端上下文时使用固定限流键。 */
     public DiagnosisTaskResponse createTask(String incidentId) {
         return createTask(incidentId, "internal");
+    }
+
+    /** 提交被拒绝时先写入可恢复终态，避免数据库遗留永久 PENDING 任务。 */
+    private void markSubmissionRejected(DiagnosisTask task) {
+        String failureReason = "诊断执行容量已满，请稍后重试";
+        task.markFailed(failureReason);
+        DiagnosisTask failedTask = diagnosisTaskRepository.saveAndFlush(task);
+        diagnosisTaskCacheService.putTask(DiagnosisTaskResponse.from(failedTask));
+        diagnosisTaskCacheService.finishTask(failedTask.getIncidentId(), false);
+        opsMindMetrics.taskFinished(false, java.time.Duration.ZERO);
+        diagnosisTaskEventPublisher.publish(
+                failedTask.getId(),
+                DiagnosisTaskEvent.failed(failedTask.getId(), failureReason)
+        );
     }
 
     /** @return 指定 taskId 的缓存或数据库状态快照 */
@@ -150,7 +173,11 @@ public class DiagnosisTaskService {
         DiagnosisTask currentTask = diagnosisTaskRepository.findById(taskId)
                 .orElseThrow(() -> new IllegalArgumentException("诊断任务不存在: " + taskId));
 
-        diagnosisTaskEventPublisher.publish(taskId, toCurrentEvent(currentTask));
+        diagnosisTaskEventPublisher.sendSnapshot(
+                taskId,
+                sseEmitter,
+                toCurrentEvent(currentTask)
+        );
         return sseEmitter;
     }
 

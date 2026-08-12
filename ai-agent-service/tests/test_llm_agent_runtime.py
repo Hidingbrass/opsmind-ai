@@ -139,6 +139,89 @@ class LlmAgentRuntimeTest(unittest.TestCase):
             observed_calls[0]["arguments"]["serviceName"],
         )
 
+    def test_failed_required_tool_must_succeed_before_final_report(self):
+        initial_calls = [
+            LlmToolCall("call-logs", "queryLogs", '{}'),
+            LlmToolCall("call-metrics", "queryMetrics", '{}'),
+            LlmToolCall(
+                "call-runbook-1",
+                "searchRunbook",
+                '{"query":"支付超时","nResults":2}',
+            ),
+            LlmToolCall(
+                "call-trace",
+                "queryTrace",
+                '{"traceId":"trace-payment"}',
+            ),
+            LlmToolCall("call-deploy", "getRecentDeployments", '{}'),
+        ]
+        final_report = json.dumps(
+            {
+                "summary": "支付链路异常",
+                "rootCause": "第三方支付网关超时",
+                "evidence": ["日志显示 gateway timeout", "Runbook 命中支付超时"],
+                "recommendation": "切换备用支付通道",
+                "confidence": 0.82,
+            },
+            ensure_ascii=False,
+        )
+        client = FakeCompletionClient(
+            [
+                _completion(tool_calls=initial_calls),
+                _completion(content=final_report),
+                _completion(
+                    tool_calls=[
+                        LlmToolCall(
+                            "call-runbook-2",
+                            "searchRunbook",
+                            '{"query":"支付超时","nResults":2}',
+                        )
+                    ]
+                ),
+                _completion(content=final_report),
+            ]
+        )
+        runbook_attempts = 0
+
+        def tool_caller(**kwargs):
+            nonlocal runbook_attempts
+            data = []
+            status = "SUCCESS"
+            error_message = None
+            if kwargs["tool_name"] == "queryLogs":
+                data = [{"traceId": "trace-payment"}]
+            elif kwargs["tool_name"] == "searchRunbook":
+                runbook_attempts += 1
+                if runbook_attempts == 1:
+                    status = "FAILED"
+                    error_message = "runbook unavailable"
+                else:
+                    data = [{"metadata": {"source": "payment-timeout.md"}}]
+            return ToolExecutionResult(
+                toolName=kwargs["tool_name"],
+                status=status,
+                data=data,
+                errorMessage=error_message,
+                latencyMs=2,
+            )
+
+        report = run_llm_diagnosis(
+            _request(),
+            _settings(),
+            client=client,
+            tool_caller=tool_caller,
+        )
+
+        self.assertEqual(2, runbook_attempts)
+        self.assertEqual(6, report.agentMetadata.toolCallCount)
+        self.assertTrue(
+            any(
+                "searchRunbook" in message.get("content", "")
+                for message in client.messages_seen[2]
+                if message.get("role") == "system"
+            )
+        )
+
     def test_unknown_tool_is_rejected_before_gateway_call(self):
         client = FakeCompletionClient(
             [

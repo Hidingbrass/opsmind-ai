@@ -4,6 +4,7 @@ import com.opsmind.backend.common.web.Result;
 import com.opsmind.backend.tool.dto.ToolExecutionRequest;
 import com.opsmind.backend.tool.dto.ToolExecutionResponse;
 import com.opsmind.backend.tool.service.ToolGatewayService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,7 +34,7 @@ public class ToolGatewayController {
      */
     @PostMapping("/execute")
     public Result<ToolExecutionResponse> execute(
-            @RequestBody ToolExecutionRequest request
+            @Valid @RequestBody ToolExecutionRequest request
     ) {
         return Result.success(toolGatewayService.execute(request));
     }

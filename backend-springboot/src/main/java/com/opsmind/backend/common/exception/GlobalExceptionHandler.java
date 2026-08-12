@@ -5,6 +5,8 @@ import com.opsmind.backend.diagnosis.service.DiagnosisRateLimitExceededException
 import com.opsmind.backend.diagnosis.service.DiagnosisTaskConflictException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -15,6 +17,28 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /** 请求字段违反长度、必填或集合大小合同时返回 HTTP 400。 */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Result<Void>> handleValidation(
+            MethodArgumentNotValidException ex
+    ) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(error -> error.getDefaultMessage())
+                .orElse("请求参数不合法");
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Result.failure(400, message));
+    }
+
+    /** 有界诊断线程池已满时返回 HTTP 503，调用方可稍后重试。 */
+    @ExceptionHandler(TaskRejectedException.class)
+    public ResponseEntity<Result<Void>> handleTaskRejected(TaskRejectedException ex) {
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Result.failure(503, "诊断执行容量已满，请稍后重试"));
+    }
 
     /** 将诊断限流转换为标准 HTTP 429，前端可提示用户稍后重试。 */
     @ExceptionHandler(DiagnosisRateLimitExceededException.class)

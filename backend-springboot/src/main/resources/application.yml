@@ -57,6 +57,10 @@ opsmind:
     base-url: ${OPSMIND_AI_BASE_URL:http://localhost:8000}
   diagnosis:
     rate-limit-per-minute: ${OPSMIND_DIAGNOSIS_RATE_LIMIT:10}
+    executor:
+      core-pool-size: ${OPSMIND_DIAGNOSIS_EXECUTOR_CORE_SIZE:2}
+      max-pool-size: ${OPSMIND_DIAGNOSIS_EXECUTOR_MAX_SIZE:4}
+      queue-capacity: ${OPSMIND_DIAGNOSIS_EXECUTOR_QUEUE_CAPACITY:20}
 
 resilience4j:
   circuitbreaker:
