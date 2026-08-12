@@ -1,21 +1,19 @@
 .DS_Store
+output/
 .idea/
-.vscode/
+**/.idea/
 
-target/
-*.class
-
-node_modules/
-dist/
-build/
-
-.venv/
-__pycache__/
-*.pyc
+backend-springboot/target/
+ai-agent-service/.venv/
 ai-agent-service/.chroma/
+**/__pycache__/
+**/.pytest_cache/
+frontend-dashboard/node_modules/
+frontend-dashboard/dist/
+.playwright-cli/
 
+# 本地模型凭证不得进入仓库；示例文件只保留变量名。
 .env
-.env.local
-
-logs/
-*.log
+**/.env
+!.env.example
+!**/.env.example

@@ -1,0 +1,57 @@
+{
+  "verifiedAt": "2026-08-12T09:07:24.189604+00:00",
+  "baseUrl": "http://127.0.0.1:18080",
+  "doubleSse": {
+    "incidentId": "0008d004-ff3c-48c7-9f86-7abf023b8a86",
+    "taskId": "218bbf0b-6097-455f-9b99-1c2706e2105c",
+    "subscribers": [
+      {
+        "stages": [
+          "RUNNING",
+          "CALL_AI",
+          "RUNNING",
+          "RUNNING",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "SUCCESS"
+        ],
+        "terminalStatus": "SUCCESS",
+        "eventCount": 15
+      },
+      {
+        "stages": [
+          "CALL_AI",
+          "RUNNING",
+          "RUNNING",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "TOOL_CALL",
+          "TOOL_SUCCESS",
+          "SUCCESS"
+        ],
+        "terminalStatus": "SUCCESS",
+        "eventCount": 14
+      }
+    ]
+  },
+  "processRecovery": {
+    "incidentId": "e9579263-0e31-4d5e-b5e6-cf23a687bd86",
+    "taskId": "acc2f3ea-b436-4f01-936a-d99d451af0b5",
+    "status": "FAILED",
+    "failureReason": "服务重启，未完成的诊断任务已终止，请重新发起诊断"
+  }
+}

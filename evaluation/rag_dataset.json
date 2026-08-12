@@ -1,0 +1,122 @@
+[
+  {
+    "id": "payment-zh-timeout",
+    "query": "支付接口响应超过 3 秒并出现 gateway timeout 应该怎么排查",
+    "relevantSources": ["payment-timeout.md"]
+  },
+  {
+    "id": "payment-en-gateway",
+    "query": "payment-service gateway timeout and read timed out",
+    "relevantSources": ["payment-timeout.md"]
+  },
+  {
+    "id": "payment-trace",
+    "query": "payment-gateway span 耗时过高并且状态异常",
+    "relevantSources": ["payment-timeout.md"]
+  },
+  {
+    "id": "payment-recovery",
+    "query": "支付通道故障时如何启用异步补偿和熔断降级",
+    "relevantSources": ["payment-timeout.md"]
+  },
+  {
+    "id": "redis-en-refused",
+    "query": "cache-service Redis connection refused",
+    "relevantSources": ["redis-connection-failure.md"]
+  },
+  {
+    "id": "redis-zh-pool",
+    "query": "Redis 连接池耗尽和连接获取超时如何处理",
+    "relevantSources": ["redis-connection-failure.md"]
+  },
+  {
+    "id": "redis-fallback",
+    "query": "缓存失效后请求大量回源数据库导致级联故障",
+    "relevantSources": ["redis-connection-failure.md"]
+  },
+  {
+    "id": "redis-observability",
+    "query": "Redis span 错误、缓存命中率下降和慢命令",
+    "relevantSources": ["redis-connection-failure.md"]
+  },
+  {
+    "id": "database-en-slow-query",
+    "query": "order-service database slow query full table scan",
+    "relevantSources": ["database-slow-query.md"]
+  },
+  {
+    "id": "database-zh-index",
+    "query": "数据库全表扫描并且查询条件缺少合适索引",
+    "relevantSources": ["database-slow-query.md"]
+  },
+  {
+    "id": "database-pagination",
+    "query": "订单列表深分页 offset 过大导致扫描行数过多",
+    "relevantSources": ["database-slow-query.md"]
+  },
+  {
+    "id": "database-metric",
+    "query": "db.query.latency.p95 升高并出现 mysql span 慢查询",
+    "relevantSources": ["database-slow-query.md"]
+  },
+  {
+    "id": "cpu-zh-throttling",
+    "query": "容器 CPU 长时间打满并持续发生 throttling，接口 P99 延迟升高",
+    "relevantSources": ["cpu-saturation.md"]
+  },
+  {
+    "id": "cpu-en-rejected",
+    "query": "RejectedExecutionException with high runnable threads and process CPU usage",
+    "relevantSources": ["cpu-saturation.md"]
+  },
+  {
+    "id": "memory-zh-growth",
+    "query": "Java 服务 Full GC 后 old generation 基线仍持续上涨如何定位内存泄漏",
+    "relevantSources": ["memory-leak.md"]
+  },
+  {
+    "id": "memory-en-oom",
+    "query": "OOMKilled and container memory working set keeps growing after traffic drops",
+    "relevantSources": ["memory-leak.md"]
+  },
+  {
+    "id": "queue-zh-lag",
+    "query": "Kafka consumer lag 持续增加，最老消息等待时间不断变长",
+    "relevantSources": ["message-queue-backlog.md"]
+  },
+  {
+    "id": "queue-en-rebalance",
+    "query": "consumer group rebalance in progress and records_lag_max rising",
+    "relevantSources": ["message-queue-backlog.md"]
+  },
+  {
+    "id": "dns-zh-coredns",
+    "query": "多个服务同时域名解析超时，CoreDNS SERVFAIL 指标升高",
+    "relevantSources": ["dns-resolution-failure.md"]
+  },
+  {
+    "id": "dns-en-unknown-host",
+    "query": "UnknownHostException and DNS lookup timeout before HTTP connection",
+    "relevantSources": ["dns-resolution-failure.md"]
+  },
+  {
+    "id": "certificate-zh-expiry",
+    "query": "HTTPS 调用出现 SSLHandshakeException，证书 notAfter 已过期",
+    "relevantSources": ["certificate-expiry.md"]
+  },
+  {
+    "id": "certificate-en-san",
+    "query": "TLS hostname verification failed because certificate SAN does not match SNI",
+    "relevantSources": ["certificate-expiry.md"]
+  },
+  {
+    "id": "disk-zh-inode",
+    "query": "磁盘使用率没有满但 inode 耗尽，应用写文件报 ENOSPC",
+    "relevantSources": ["disk-space-exhaustion.md"]
+  },
+  {
+    "id": "disk-en-deleted-file",
+    "query": "filesystem full while lsof shows deleted files still held open by process",
+    "relevantSources": ["disk-space-exhaustion.md"]
+  }
+]

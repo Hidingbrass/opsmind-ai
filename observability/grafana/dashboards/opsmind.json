@@ -1,0 +1,72 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "诊断任务成功数",
+      "datasource": { "type": "prometheus", "uid": "opsmind-prometheus" },
+      "targets": [{ "expr": "opsmind_diagnosis_tasks_total{status=\"success\"}", "refId": "A" }],
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "诊断任务失败数",
+      "datasource": { "type": "prometheus", "uid": "opsmind-prometheus" },
+      "targets": [{ "expr": "opsmind_diagnosis_tasks_total{status=\"failed\"}", "refId": "A" }],
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "AI 调用耗时",
+      "datasource": { "type": "prometheus", "uid": "opsmind-prometheus" },
+      "targets": [{
+        "expr": "rate(opsmind_ai_call_duration_seconds_sum[5m]) / clamp_min(rate(opsmind_ai_call_duration_seconds_count[5m]), 1)",
+        "legendFormat": "{{status}}",
+        "refId": "A"
+      }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "工具调用速率",
+      "datasource": { "type": "prometheus", "uid": "opsmind-prometheus" },
+      "targets": [{
+        "expr": "sum by (tool, status) (rate(opsmind_tool_calls_total[5m]))",
+        "legendFormat": "{{tool}} / {{status}}",
+        "refId": "A"
+      }],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Agent Token 速率",
+      "datasource": { "type": "prometheus", "uid": "opsmind-prometheus" },
+      "targets": [{
+        "expr": "sum by (mode, direction) (rate(opsmind_agent_tokens_total[5m]))",
+        "legendFormat": "{{mode}} / {{direction}}",
+        "refId": "A"
+      }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Agent 执行模式",
+      "datasource": { "type": "prometheus", "uid": "opsmind-prometheus" },
+      "targets": [{
+        "expr": "sum by (mode) (rate(opsmind_agent_executions_total[5m]))",
+        "legendFormat": "{{mode}}",
+        "refId": "A"
+      }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["opsmind", "sre", "ai"],
+  "templating": { "list": [] },
+  "time": { "from": "now-30m", "to": "now" },
+  "title": "OpsMind AI 运行概览",
+  "uid": "opsmind-overview",
+  "version": 1
+}

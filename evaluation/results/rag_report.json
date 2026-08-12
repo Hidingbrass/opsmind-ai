@@ -1,0 +1,420 @@
+{
+  "generatedAt": "2026-08-12T09:19:29.612322+00:00",
+  "total": 24,
+  "hitAt1": 1.0,
+  "hitAt3": 1.0,
+  "mrr": 1.0,
+  "retrievalModes": {
+    "hybrid": 72
+  },
+  "results": [
+    {
+      "id": "payment-zh-timeout",
+      "query": "支付接口响应超过 3 秒并出现 gateway timeout 应该怎么排查",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "payment-timeout.md",
+        "payment-timeout.md",
+        "payment-timeout.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "payment-en-gateway",
+      "query": "payment-service gateway timeout and read timed out",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "payment-timeout.md",
+        "payment-timeout.md",
+        "payment-timeout.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "payment-trace",
+      "query": "payment-gateway span 耗时过高并且状态异常",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "payment-timeout.md",
+        "database-slow-query.md",
+        "cpu-saturation.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "payment-recovery",
+      "query": "支付通道故障时如何启用异步补偿和熔断降级",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "payment-timeout.md",
+        "payment-timeout.md",
+        "payment-timeout.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "redis-en-refused",
+      "query": "cache-service Redis connection refused",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "redis-connection-failure.md",
+        "redis-connection-failure.md",
+        "redis-connection-failure.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "redis-zh-pool",
+      "query": "Redis 连接池耗尽和连接获取超时如何处理",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "redis-connection-failure.md",
+        "redis-connection-failure.md",
+        "redis-connection-failure.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "redis-fallback",
+      "query": "缓存失效后请求大量回源数据库导致级联故障",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "redis-connection-failure.md",
+        "redis-connection-failure.md",
+        "database-slow-query.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "redis-observability",
+      "query": "Redis span 错误、缓存命中率下降和慢命令",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "redis-connection-failure.md",
+        "redis-connection-failure.md",
+        "redis-connection-failure.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "database-en-slow-query",
+      "query": "order-service database slow query full table scan",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "database-slow-query.md",
+        "database-slow-query.md",
+        "database-slow-query.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "database-zh-index",
+      "query": "数据库全表扫描并且查询条件缺少合适索引",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "database-slow-query.md",
+        "database-slow-query.md",
+        "database-slow-query.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "database-pagination",
+      "query": "订单列表深分页 offset 过大导致扫描行数过多",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "database-slow-query.md",
+        "database-slow-query.md",
+        "database-slow-query.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "database-metric",
+      "query": "db.query.latency.p95 升高并出现 mysql span 慢查询",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "database-slow-query.md",
+        "database-slow-query.md",
+        "database-slow-query.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "cpu-zh-throttling",
+      "query": "容器 CPU 长时间打满并持续发生 throttling，接口 P99 延迟升高",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "cpu-saturation.md",
+        "cpu-saturation.md",
+        "database-slow-query.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "cpu-en-rejected",
+      "query": "RejectedExecutionException with high runnable threads and process CPU usage",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "cpu-saturation.md",
+        "cpu-saturation.md",
+        "cpu-saturation.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "memory-zh-growth",
+      "query": "Java 服务 Full GC 后 old generation 基线仍持续上涨如何定位内存泄漏",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "memory-leak.md",
+        "memory-leak.md",
+        "memory-leak.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "memory-en-oom",
+      "query": "OOMKilled and container memory working set keeps growing after traffic drops",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "memory-leak.md",
+        "memory-leak.md",
+        "cpu-saturation.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "queue-zh-lag",
+      "query": "Kafka consumer lag 持续增加，最老消息等待时间不断变长",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "message-queue-backlog.md",
+        "message-queue-backlog.md",
+        "memory-leak.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "queue-en-rebalance",
+      "query": "consumer group rebalance in progress and records_lag_max rising",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "message-queue-backlog.md",
+        "message-queue-backlog.md",
+        "message-queue-backlog.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "dns-zh-coredns",
+      "query": "多个服务同时域名解析超时，CoreDNS SERVFAIL 指标升高",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "dns-resolution-failure.md",
+        "dns-resolution-failure.md",
+        "dns-resolution-failure.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "dns-en-unknown-host",
+      "query": "UnknownHostException and DNS lookup timeout before HTTP connection",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "dns-resolution-failure.md",
+        "redis-connection-failure.md",
+        "dns-resolution-failure.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "certificate-zh-expiry",
+      "query": "HTTPS 调用出现 SSLHandshakeException，证书 notAfter 已过期",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "certificate-expiry.md",
+        "certificate-expiry.md",
+        "certificate-expiry.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "certificate-en-san",
+      "query": "TLS hostname verification failed because certificate SAN does not match SNI",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "certificate-expiry.md",
+        "certificate-expiry.md",
+        "certificate-expiry.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "disk-zh-inode",
+      "query": "磁盘使用率没有满但 inode 耗尽，应用写文件报 ENOSPC",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "disk-space-exhaustion.md",
+        "disk-space-exhaustion.md",
+        "disk-space-exhaustion.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "disk-en-deleted-file",
+      "query": "filesystem full while lsof shows deleted files still held open by process",
+      "firstRelevantRank": 1,
+      "hitAt1": true,
+      "hitAt3": true,
+      "topSources": [
+        "disk-space-exhaustion.md",
+        "disk-space-exhaustion.md",
+        "memory-leak.md"
+      ],
+      "topRetrievalModes": [
+        "hybrid",
+        "hybrid",
+        "hybrid"
+      ]
+    }
+  ]
+}

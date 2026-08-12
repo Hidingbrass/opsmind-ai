@@ -1,0 +1,96 @@
+{
+  "generatedAt": "2026-08-12T09:19:18.932784+00:00",
+  "passed": 3,
+  "total": 3,
+  "passRate": 1.0,
+  "results": [
+    {
+      "scenarioKey": "payment-timeout",
+      "passed": true,
+      "scores": {
+        "rootCause": true,
+        "evidence": true,
+        "recommendation": true,
+        "toolCoverage": true,
+        "incidentReport": true
+      },
+      "taskId": "5683b468-044d-4c04-9dd9-f56a5cb0279e",
+      "incidentId": "fdef522b-d9f1-4d4f-b36a-0867e568c116",
+      "diagnosisRecordId": "f80cd4e4-83da-413e-98e7-5ae6672b5374",
+      "latencyMs": 608,
+      "confidence": 0.86,
+      "executionMode": "DETERMINISTIC",
+      "modelName": "deterministic-rag-agent",
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "agentToolCallCount": 0,
+      "toolCalls": [
+        "queryLogs",
+        "queryMetrics",
+        "queryTrace",
+        "getRecentDeployments",
+        "searchRunbook",
+        "generateIncidentReport"
+      ]
+    },
+    {
+      "scenarioKey": "redis-connection-failure",
+      "passed": true,
+      "scores": {
+        "rootCause": true,
+        "evidence": true,
+        "recommendation": true,
+        "toolCoverage": true,
+        "incidentReport": true
+      },
+      "taskId": "245c8389-8000-4664-b098-e2d4c065694c",
+      "incidentId": "b41fbe4f-1b1f-44f1-93ca-6a85d188aa72",
+      "diagnosisRecordId": "700b6c36-719f-4f8e-b4f7-9f4c5ef4b041",
+      "latencyMs": 549,
+      "confidence": 0.84,
+      "executionMode": "DETERMINISTIC",
+      "modelName": "deterministic-rag-agent",
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "agentToolCallCount": 0,
+      "toolCalls": [
+        "queryLogs",
+        "queryMetrics",
+        "queryTrace",
+        "getRecentDeployments",
+        "searchRunbook",
+        "generateIncidentReport"
+      ]
+    },
+    {
+      "scenarioKey": "database-slow-query",
+      "passed": true,
+      "scores": {
+        "rootCause": true,
+        "evidence": true,
+        "recommendation": true,
+        "toolCoverage": true,
+        "incidentReport": true
+      },
+      "taskId": "8d6477b1-9a42-4d5c-bf9f-e5edcbfd3e42",
+      "incidentId": "e70d1f73-3374-44e7-a33d-15880fe60511",
+      "diagnosisRecordId": "f5a44f74-0fb7-415c-8c56-e95e102462cf",
+      "latencyMs": 566,
+      "confidence": 0.85,
+      "executionMode": "DETERMINISTIC",
+      "modelName": "deterministic-rag-agent",
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "agentToolCallCount": 0,
+      "toolCalls": [
+        "queryLogs",
+        "queryMetrics",
+        "queryTrace",
+        "queryTrace",
+        "getRecentDeployments",
+        "searchRunbook",
+        "generateIncidentReport"
+      ]
+    }
+  ]
+}

@@ -75,12 +75,15 @@ Java 后端工程能力 > AI Agent 落地能力 > SRE 可观测性知识 > 部�
 - RAG 的流程是什么？
 - 为什么企业 AI 应用需要私有知识库？
 - 如何让报告引用 Runbook 来源？
+- 为什么故障码、服务名等精确词只用向量检索容易漏召回？
+- 为什么使用 RRF 融合 Dense 与 BM25 排名，而不直接相加原始分数？
 
 项目中的用法：
 
-- 把运维手册写入 Chroma。
-- 根据故障现象检索相关 Runbook。
+- 把 9 份运维手册切成 45 个片段并写入 Chroma。
+- 同时执行 Dense 和 BM25 检索，再用 RRF 融合排序。
 - 把检索结果作为诊断证据。
+- 用 24 条固定查询评估 Hit@1、Hit@3 和 MRR。
 
 ## 增强版必学
 
@@ -121,9 +124,18 @@ Java 后端工程能力 > AI Agent 落地能力 > SRE 可观测性知识 > 部�
 
 项目中的用法：
 
-- 模型决定要调用哪个工具。
+- 默认由确定性工作流选择工具，确保无 API Key 时稳定演示。
+- 可选 `llm` 模式让 OpenAI-compatible 模型自主选择五个只读工具。
+- 模型失败、越权或返回不合法 JSON 时记录 `LLM_FALLBACK` 并回到确定性路径。
 - Spring Boot Tool Gateway 统一执行工具。
 - 工具调用记录入库，前端展示调用时间线。
+
+安全边界：
+
+- 模型不持有数据库或基础设施凭据。
+- 工具参数必须通过事故、服务和 trace 归属校验。
+- 工具输出按不可信数据处理，并限制步骤数、调用数和上下文长度。
+- `generateIncidentReport` 不暴露给模型，由受信代码在诊断完成后调用。
 
 ### Redis 工程化
 
@@ -193,9 +205,11 @@ Java 后端工程能力 > AI Agent 落地能力 > SRE 可观测性知识 > 部�
 
 项目中的用法：
 
-- 为支付超时、Redis 异常、数据库慢查询设置期望答案。
-- 自动运行诊断并生成评测报告。
-- 用评测结果改进 Prompt、Runbook 和工具调用策略。
+- 用 24 条查询评估 RAG 排名质量。
+- 为支付超时、Redis 异常、数据库慢查询设置期望根因、证据和动作。
+- 用单元测试覆盖模型工具循环、非法工具、越权 trace、Prompt Injection 和 fallback。
+- 自动运行真实 HTTP 诊断并生成评测报告。
+- 真实模型接入后，再增加模型版本固定、成本、稳定性和连续回归验收。
 
 ## 建议学习顺序
 
@@ -203,12 +217,12 @@ Java 后端工程能力 > AI Agent 落地能力 > SRE 可观测性知识 > 部�
 2. 故障事件和故障注入业务闭环。
 3. 日志、指标、链路追踪的基本概念。
 4. Spring Boot 调用 Python FastAPI。
-5. Chroma + Runbook RAG。
+5. Chroma + BM25 + RRF 混合 Runbook RAG。
 6. 异步任务和任务状态机。
 7. SSE 实时推送。
-8. Function Calling 和工具网关。
+8. 双模式 Function Calling、工具网关和安全边界。
 9. Redis 缓存、限流、任务状态和 Stream。
-10. Resilience4j 超时、重试、熔断和限流。
+10. HTTP 超时与 Resilience4j 重试、熔断和并发隔离。
 11. Prometheus、Grafana 和 OpenTelemetry。
 12. AI 诊断质量评测。
 13. Docker Compose、Nginx 和项目展示。
